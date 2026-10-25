@@ -4,12 +4,14 @@
     "license": "LGPL-3.0-or-later",
     "type": "library",
     "require": {
-        "php": "^8.5"
+        "php": "^8.5",
+        "ext-openssl": "*"
     },
     "require-dev": {
         "captainhook/plugin-composer": "^5.3",
         "ergebnis/composer-normalize": "^2.54",
         "fakerphp/faker": "^1.24",
+        "infection/infection": "^0.35",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.3",
         "phpstan/phpstan-phpunit": "^2.1",
@@ -36,6 +38,7 @@
             "captainhook/plugin-composer": true,
             "dealerdirect/phpcodesniffer-composer-installer": true,
             "ergebnis/composer-normalize": true,
+            "infection/extension-installer": true,
             "phpstan/extension-installer": true,
             "ramsey/composer-repl": true
         },
@@ -66,6 +69,7 @@
             "vendor/bin/phpcs --colors --cache=build/phpcs-cache",
             "vendor/bin/phpstan analyze --ansi -v --memory-limit=1G"
         ],
+        "mutation": "XDEBUG_MODE=coverage vendor/bin/infection --threads=max --min-msi=90 --min-covered-msi=95 --show-mutations",
         "test": "vendor/bin/phpunit --colors=always"
     }
 }
