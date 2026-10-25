@@ -29,7 +29,9 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
+use function ltrim;
 use function sprintf;
+use function strcmp;
 
 /**
  * An elliptic curve key, the `EC` key type of RFC 7518 section 6.2
@@ -37,7 +39,7 @@ use function sprintf;
  * The coordinates and the private key are bytes of the full length the
  * curve fixes, leading zeros included, as sections 6.2.1.2, 6.2.1.3, and
  * 6.2.2.1 require. The point is checked to lie on the curve, and a private
- * key is checked to derive the point.
+ * key is checked to be less than the curve's order and to derive the point.
  */
 final readonly class EcKey extends Jwk
 {
@@ -60,7 +62,8 @@ final readonly class EcKey extends Jwk
      *
      * @throws InvalidJwk with `UnsupportedCurve` for an `OKP` curve; with
      *     `WrongLength` for a coordinate or private key of another length
-     *     than the curve fixes; with `PointNotOnCurve` when `x` and `y` are
+     *     than the curve fixes; with `InvalidValue` for a `d` that is zero
+     *     or not less than the curve's order; with `PointNotOnCurve` when `x` and `y` are
      *     not a point on the curve; with `KeyPairMismatch` when `d` does not
      *     derive the point; or as the common members' rules say
      * @throws InvalidArgument when an additional member is named after a member
@@ -93,6 +96,7 @@ final readonly class EcKey extends Jwk
 
         if ($privateKey !== null) {
             self::checkLength('d', $privateKey, $curve->privateKeyLength(), $curve);
+            self::checkPrivateKeyRange($privateKey, $curve);
         }
 
         $this->publicOpenSslKey = $this->buildPublicOpenSslKey($curveName);
@@ -214,6 +218,28 @@ final readonly class EcKey extends Jwk
     protected function keyMemberNames(): array
     {
         return self::MEMBER_NAMES;
+    }
+
+    /**
+     * Checks that the private key is an integer from 1 to the curve's order
+     * minus 1, per SEC 1 section 3.2.1
+     *
+     * The key and the order are big-endian bytes of one length, so
+     * comparing them as strings compares them as integers.
+     *
+     * @throws InvalidJwk with `InvalidValue`
+     */
+    private static function checkPrivateKeyRange(#[SensitiveParameter] string $privateKey, Curve $curve): void
+    {
+        $order = $curve->order();
+
+        if ($order === null || ltrim($privateKey, "\0") === '' || strcmp($privateKey, $order) >= 0) {
+            throw new InvalidJwk(
+                InvalidJwkReason::InvalidValue,
+                sprintf('The "d" member must be an integer from 1 to the order of the curve %s minus 1', $curve->value),
+                'd',
+            );
+        }
     }
 
     /**

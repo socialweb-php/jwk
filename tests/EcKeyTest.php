@@ -219,12 +219,22 @@ class EcKeyTest extends TestCase
         ];
         yield 'a d of 32 zero bytes' => [
             [...$a2, 'd' => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'],
-            InvalidJwkReason::KeyPairMismatch,
+            InvalidJwkReason::InvalidValue,
             'd',
         ];
         yield 'a d equal to the curve order' => [
             [...$a2, 'd' => '_____wAAAAD__________7zm-q2nF56E87nKwvxjJVE'],
-            InvalidJwkReason::KeyPairMismatch,
+            InvalidJwkReason::InvalidValue,
+            'd',
+        ];
+        yield 'a d of the curve order plus 1, with the point 1 derives' => [
+            [
+                ...$a2,
+                'x' => 'axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY',
+                'y' => 'T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU',
+                'd' => '_____wAAAAD__________7zm-q2nF56E87nKwvxjJVI',
+            ],
+            InvalidJwkReason::InvalidValue,
             'd',
         ];
         yield 'an x that is not base64url' => [
@@ -290,6 +300,40 @@ class EcKeyTest extends TestCase
         } catch (InvalidJwk $exception) {
             $this->assertSame(
                 'The "d" member does not derive the point in the "x" and "y" members',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testAcceptsThePrivateKeysAtTheEndsOfTheRange(): void
+    {
+        $x = 'axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY';
+        $one = ['kty' => 'EC', 'crv' => 'P-256', 'x' => $x, 'y' => 'T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU'];
+        $orderMinusOne = [
+            'kty' => 'EC',
+            'crv' => 'P-256',
+            'x' => $x,
+            'y' => 'sBy9HAHlgGVxGBS1g_Bh6dQxzKmUzqExNEm_l8hArgo',
+        ];
+
+        $this->assertTrue(Jwk::fromJson([...$one, 'd' => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE'])->isPrivate());
+        $this->assertTrue(
+            Jwk::fromJson([...$orderMinusOne, 'd' => '_____wAAAAD__________7zm-q2nF56E87nKwvxjJVA'])->isPrivate(),
+        );
+    }
+
+    public function testThePrivateKeyRangeMessageNamesTheCurve(): void
+    {
+        try {
+            new EcKey(Curve::P384, str_repeat("\1", 48), str_repeat("\1", 48), str_repeat("\0", 48));
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
+            $this->assertSame('d', $exception->member);
+            $this->assertSame(
+                'The "d" member must be an integer from 1 to the order of the curve P-384 minus 1',
                 $exception->getMessage(),
             );
         }

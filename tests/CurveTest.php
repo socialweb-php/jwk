@@ -8,6 +8,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\Curve;
 use SocialWeb\Jwk\KeyType;
 
+use function bin2hex;
+use function strlen;
+
 use const OPENSSL_KEYTYPE_EC;
 use const OPENSSL_KEYTYPE_ED25519;
 use const OPENSSL_KEYTYPE_ED448;
@@ -51,6 +54,42 @@ class CurveTest extends TestCase
         $this->assertSame($opensslCurveName, $curve->opensslCurveName());
         $this->assertSame($opensslKeyType, $curve->opensslKeyType());
         $this->assertSame($opensslDetailsKey, $curve->opensslDetailsKey());
+    }
+
+    /**
+     * The orders as `openssl ecparam -param_enc explicit -text` prints them
+     *
+     * @return iterable<string, array{Curve, ?string}>
+     */
+    public static function orderProvider(): iterable
+    {
+        yield 'P-256' => [Curve::P256, 'ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551'];
+        yield 'P-384' => [
+            Curve::P384,
+            'ffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973',
+        ];
+        yield 'P-521' => [
+            Curve::P521,
+            '01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+            . 'fa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb71e91386409',
+        ];
+        yield 'secp256k1' => [Curve::Secp256k1, 'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141'];
+        yield 'Ed25519' => [Curve::Ed25519, null];
+        yield 'Ed448' => [Curve::Ed448, null];
+        yield 'X25519' => [Curve::X25519, null];
+        yield 'X448' => [Curve::X448, null];
+    }
+
+    #[DataProvider('orderProvider')]
+    public function testGivesTheOrderOfAnEcCurve(Curve $curve, ?string $order): void
+    {
+        $actual = $curve->order();
+
+        $this->assertSame($order, $actual === null ? null : bin2hex($actual));
+
+        if ($actual !== null) {
+            $this->assertSame($curve->publicKeyLength(), strlen($actual));
+        }
     }
 
     public function testMatchesTheCrvValueCaseSensitively(): void

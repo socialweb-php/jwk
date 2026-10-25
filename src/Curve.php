@@ -95,6 +95,34 @@ enum Curve: string
     }
 
     /**
+     * Returns the order of an `EC` curve's base point as big-endian bytes of
+     * the curve's coordinate length, or `null` for an `OKP` curve
+     *
+     * An `EC` private key is an integer from 1 to the order minus 1, per
+     * SEC 1 section 3.2.1. The orders are the curves' domain parameters
+     * from SEC 2, for the curves RFC 7518 section 6.2.1.1 and RFC 8812
+     * section 3.1 name.
+     */
+    public function order(): ?string
+    {
+        return match ($this) {
+            self::P256 => "\xff\xff\xff\xff\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff"
+                . "\xbc\xe6\xfa\xad\xa7\x17\x9e\x84\xf3\xb9\xca\xc2\xfc\x63\x25\x51",
+            self::P384 => "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+                . "\xff\xff\xff\xff\xff\xff\xff\xff\xc7\x63\x4d\x81\xf4\x37\x2d\xdf"
+                . "\x58\x1a\x0d\xb2\x48\xb0\xa7\x7a\xec\xec\x19\x6a\xcc\xc5\x29\x73",
+            self::P521 => "\x01\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+                . "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+                . "\xff\xfa\x51\x86\x87\x83\xbf\x2f\x96\x6b\x7f\xcc\x01\x48\xf7\x09"
+                . "\xa5\xd0\x3b\xb5\xc9\xb8\x89\x9c\x47\xae\xbb\x6f\xb7\x1e\x91\x38"
+                . "\x64\x09",
+            self::Secp256k1 => "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfe"
+                . "\xba\xae\xdc\xe6\xaf\x48\xa0\x3b\xbf\xd2\x5e\x8c\xd0\x36\x41\x41",
+            default => null,
+        };
+    }
+
+    /**
      * Returns the name OpenSSL gives the curve in the details of an `EC`
      * key, or `null` for an `OKP` curve, which OpenSSL treats as a key type
      */
