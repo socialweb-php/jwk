@@ -42,6 +42,7 @@ use function json_encode;
 use function sprintf;
 use function strlen;
 
+use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_SLASHES;
 
@@ -244,13 +245,16 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * Returns the JWK as JSON text
      *
+     * A number with a zero fraction, such as `1.0`, is written as it was
+     * received, not as an integer.
+     *
      * Every key the package accepts can be written: its strings are valid
      * UTF-8, its numbers are finite, and its nesting is no deeper than
      * `json_decode()` reads.
      */
     public function toJson(): string
     {
-        return json_encode($this, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        return json_encode($this, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
     }
 
     /**

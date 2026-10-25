@@ -357,6 +357,17 @@ class JwkTest extends TestCase
         $this->assertSame($json, Jwk::fromJson($json)->toJson());
     }
 
+    public function testWritesANumberWithAZeroFractionAsReceived(): void
+    {
+        $json = '{"kty":"oct","k":"AQAB","one":1.0,"list":[2.0,3],"object":{"a":-0.0}}';
+
+        $this->assertSame($json, Jwk::fromJson($json)->toJson());
+        $this->assertSame(
+            '{"kty":"oct","k":"AQ","f":1.0}',
+            new OctKey("\x01")->withAdditionalMember('f', 1.0)->toJson(),
+        );
+    }
+
     public function testKeepsAnAdditionalMemberAsAJsonValue(): void
     {
         $key = new OctKey("\x01");
