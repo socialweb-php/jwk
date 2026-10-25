@@ -29,8 +29,9 @@ use InvalidArgumentException;
  * Thrown for a caller's own mistake: an additional member named after a
  * member the key type defines, given to `withAdditionalMember()` or to a
  * key class's constructor; a string that is not base64url, given to
- * `Base64Url::decode()`; or members that describe no key OpenSSL builds,
- * given to `OpenSsl::build()`
+ * `Base64Url::decode()`; members that describe no key OpenSSL builds,
+ * given to `OpenSsl::build()`; or a reader that is not an entry of the
+ * `oth` member, given to `OtherPrimeInfo::fromMembers()`
  */
 final class InvalidArgument extends InvalidArgumentException implements JwkException
 {

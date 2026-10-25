@@ -26,6 +26,7 @@ namespace SocialWeb\Jwk;
 use JsonSerializable;
 use LogicException;
 use SensitiveParameter;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
@@ -63,11 +64,16 @@ final readonly class OtherPrimeInfo implements JsonSerializable
      *
      * @internal
      *
+     * @throws InvalidArgument when the reader is not an entry of the `oth`
+     *     member of a JWK
      * @throws InvalidJwk naming the `oth` member, as the constructor does,
      *     or when a member is absent, is not a string, or is not base64url
      */
     public static function fromMembers(#[SensitiveParameter] MemberReader $members): self
     {
+        $entry = $members->entryOf('oth') ?? throw new InvalidArgument(
+            'An "oth" entry can be read only from an entry of the "oth" member of a JWK',
+        );
         $primeFactor = $members->requiredBytes('r');
         $factorCrtExponent = $members->requiredBytes('d');
         $factorCrtCoefficient = $members->requiredBytes('t');
@@ -76,7 +82,7 @@ final readonly class OtherPrimeInfo implements JsonSerializable
             $primeFactor,
             $factorCrtExponent,
             $factorCrtCoefficient,
-            $members->entry() ?? 'an "oth" entry',
+            $entry,
         );
 
         return new self($primeFactor, $factorCrtExponent, $factorCrtCoefficient);

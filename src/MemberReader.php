@@ -309,6 +309,16 @@ final class MemberReader
     }
 
     /**
+     * Returns where the object is, such as `entry 2 of "oth"`, when it is
+     * an entry of a list that the top-level member `$list` holds, or `null`
+     * when it is not
+     */
+    public function entryOf(string $list): ?string
+    {
+        return $this->list === $list ? $this->entry : null;
+    }
+
+    /**
      * Returns every member whose name is not in the list, in the order
      * received, with each JSON object in it as a `stdClass` and each JSON
      * array as a PHP list

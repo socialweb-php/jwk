@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace SocialWeb\Test\Jwk;
 
 use LogicException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\MemberReader;
@@ -84,23 +86,48 @@ class OtherPrimeInfoTest extends TestCase
 
     public function testReadsAnEntryFromItsMembers(): void
     {
-        $info = OtherPrimeInfo::fromMembers(MemberReader::fromJson('{"r":"AQI","d":"Aw","t":"BAUG"}'));
+        $reader = MemberReader::fromJson('{"oth":[{"r":"AQI","d":"Aw","t":"BAUG"}]}')->objectList('oth')[0];
 
-        $this->assertSame(['r' => 'AQI', 'd' => 'Aw', 't' => 'BAUG'], $info->jsonSerialize());
+        $this->assertSame(
+            ['r' => 'AQI', 'd' => 'Aw', 't' => 'BAUG'],
+            OtherPrimeInfo::fromMembers($reader)->jsonSerialize(),
+        );
     }
 
-    public function testAnEntryReadAloneIsNamedAsAnEntry(): void
+    /**
+     * @return iterable<string, array{MemberReader}>
+     */
+    public static function readerThatIsNotAnOthEntryProvider(): iterable
     {
-        try {
-            OtherPrimeInfo::fromMembers(MemberReader::fromJson('{"r":"AQ","d":"Aw","t":"BA"}'));
-            $this->fail('Expected InvalidJwk');
-        } catch (InvalidJwk $exception) {
-            $this->assertSame('oth', $exception->member);
-            $this->assertSame(
-                'The "r" member of an "oth" entry must be a prime, and 1 is not a prime',
-                $exception->getMessage(),
-            );
-        }
+        yield 'a JWK' => [MemberReader::fromJson('{"r":"AQI","d":"Aw","t":"BAUG"}')];
+        yield 'an entry of another member' => [
+            MemberReader::fromJson('{"x":[{"r":"AQI","d":"Aw","t":"BAUG"}]}')->objectList('x')[0],
+        ];
+        yield 'an entry of "oth" inside an entry of another member' => [
+            MemberReader::fromJson('{"x":[{"oth":[{"r":"AQI","d":"Aw","t":"BAUG"}]}]}')
+                ->objectList('x')[0]
+                ->objectList('oth')[0],
+        ];
+    }
+
+    #[DataProvider('readerThatIsNotAnOthEntryProvider')]
+    public function testRefusesAReaderThatIsNotAnOthEntry(MemberReader $reader): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains(
+            'An "oth" entry can be read only from an entry of the "oth" member of a JWK',
+        );
+
+        OtherPrimeInfo::fromMembers($reader);
+    }
+
+    public function testEntryOfNamesOnlyTheListThatHoldsTheEntry(): void
+    {
+        $reader = MemberReader::fromJson('{"oth":[{},{}]}')->objectList('oth')[1];
+
+        $this->assertSame('entry 2 of "oth"', $reader->entryOf('oth'));
+        $this->assertNull($reader->entryOf('x'));
+        $this->assertNull(MemberReader::fromJson('{}')->entryOf('oth'));
     }
 
     public function testRedactsEveryMemberWhenDumped(): void
