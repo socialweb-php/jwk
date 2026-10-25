@@ -10,6 +10,8 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\MemberReader;
 
+use function sprintf;
+use function str_contains;
 use function str_repeat;
 
 class MemberReaderTest extends TestCase
@@ -74,8 +76,16 @@ class MemberReaderTest extends TestCase
 
         $this->assertTrue(MemberReader::fromJson($nested(510))->has('deep'));
 
-        $this->expectException(InvalidJwk::class);
-        MemberReader::fromJson($nested(511));
+        try {
+            MemberReader::fromJson($nested(511));
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+            $this->assertSame(
+                'The JSON text does not parse: Maximum stack depth exceeded',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testRefusesJsonTextWithContentAfterTheObject(): void
@@ -262,5 +272,71 @@ class MemberReaderTest extends TestCase
 
         $this->assertSame(['ext' => true, 'nested' => ['a' => [1, 2]]], $reader->except(['kty', 'k']));
         $this->assertSame([], $reader->except(['kty', 'ext', 'k', 'nested']));
+    }
+
+    public function testExceptLeavesOutANumericMemberName(): void
+    {
+        $reader = MemberReader::fromJson('{"1":"one","2":"two","kty":"oct"}');
+
+        $this->assertSame(['2' => 'two', 'kty' => 'oct'], $reader->except(['1']));
+        $this->assertSame([], $reader->except(['1', '2', 'kty']));
+    }
+
+    public function testAnEmptyJsonArrayIsNotAnObject(): void
+    {
+        try {
+            MemberReader::fromJson('[]');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::NotAnObject, $exception->reason);
+        }
+    }
+
+    public function testAJsonObjectIsNotAStringList(): void
+    {
+        foreach (['{"key_ops":{}}', '{"x5c":{}}'] as $json) {
+            $member = str_contains($json, 'key_ops') ? 'key_ops' : 'x5c';
+
+            try {
+                MemberReader::fromJson($json)->stringList($member);
+                $this->fail('Expected InvalidJwk');
+            } catch (InvalidJwk $exception) {
+                $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+                $this->assertSame($member, $exception->member);
+                $this->assertSame(sprintf('The "%s" member must be an array', $member), $exception->getMessage());
+            }
+        }
+    }
+
+    public function testAJsonObjectIsNotAnObjectList(): void
+    {
+        try {
+            MemberReader::fromJson('{"oth":{}}')->objectList('oth');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame('The "oth" member must be an array', $exception->getMessage());
+        }
+    }
+
+    public function testAJsonArrayIsNotAnEntryOfAnObjectList(): void
+    {
+        try {
+            MemberReader::fromJson('{"oth":[[]]}')->objectList('oth');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame('Every entry of the "oth" member must be an object', $exception->getMessage());
+        }
+    }
+
+    public function testReadsEmptyJsonObjectsAndArraysAsTheyAre(): void
+    {
+        $reader = MemberReader::fromJson('{"key_ops":[],"oth":[{}],"nested":{"a":{},"b":[]}}');
+
+        $this->assertSame([], $reader->stringList('key_ops'));
+        $this->assertCount(1, $reader->objectList('oth'));
+        $this->assertSame(['nested' => ['a' => [], 'b' => []]], $reader->except(['key_ops', 'oth']));
     }
 }

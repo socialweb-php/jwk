@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace SocialWeb\Test\Jwk;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\Exception\ConversionFailed;
 use SocialWeb\Jwk\Exception\ConversionFailedReason;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\Jwk;
@@ -17,6 +19,7 @@ use SocialWeb\Jwk\OctKey;
 use function hash;
 use function json_encode;
 use function print_r;
+use function sprintf;
 use function strlen;
 use function substr;
 
@@ -111,6 +114,16 @@ class OctKeyTest extends TestCase
         }
     }
 
+    public function testRefusesAnEmptyJsonArrayAsAnObject(): void
+    {
+        try {
+            Jwk::fromJson('[]');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::NotAnObject, $exception->reason);
+        }
+    }
+
     public function testRefusesAMissingKThroughFromJson(): void
     {
         try {
@@ -146,5 +159,50 @@ class OctKeyTest extends TestCase
 
         $this->assertSame(['kty' => 'oct', 'k' => '[redacted]', 'kid' => 'hmac-1'], $key->__debugInfo());
         $this->assertStringNotContainsString('AQID', print_r($key, true));
+    }
+
+    public function testKeepsNumericAdditionalMemberNamesThroughARoundTrip(): void
+    {
+        $json = '{"kty":"oct","k":"AQID","1":"one","kid":"a","7":"seven"}';
+        $key = Jwk::fromJson($json);
+
+        $this->assertSame('{"kty":"oct","k":"AQID","kid":"a","1":"one","7":"seven"}', $key->toJson());
+        $this->assertSame($key->toJson(), Jwk::fromJson($key->toJson())->toJson());
+    }
+
+    public function testAddsAndRemovesNumericAdditionalMemberNames(): void
+    {
+        $key = (new OctKey("\x01"))->withAdditionalMember('5', 'five')->withAdditionalMember('7', 'seven');
+
+        $this->assertSame('{"kty":"oct","k":"AQ","5":"five","7":"seven"}', $key->toJson());
+        $this->assertSame('{"kty":"oct","k":"AQ","7":"seven"}', $key->withoutAdditionalMember('5')->toJson());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function definedMemberNameProvider(): iterable
+    {
+        yield 'kty' => ['kty'];
+        yield 'kid' => ['kid'];
+        yield 'k' => ['k'];
+    }
+
+    #[DataProvider('definedMemberNameProvider')]
+    public function testRefusesAnAdditionalMemberNamedForADefinedMember(string $name): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessage(
+            sprintf('The "%s" member is defined for this key type and is not an additional member', $name),
+        );
+
+        new OctKey("\x01", additionalMembers: [$name => 'x']);
+    }
+
+    public function testWithAdditionalMemberRefusesADefinedMemberName(): void
+    {
+        $this->expectException(InvalidArgument::class);
+
+        (new OctKey("\x01"))->withAdditionalMember('k', 'x');
     }
 }

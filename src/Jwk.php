@@ -30,6 +30,7 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
+use function array_keys;
 use function array_unique;
 use function count;
 use function hash;
@@ -299,13 +300,12 @@ abstract readonly class Jwk implements JsonSerializable
      */
     public function withAdditionalMember(string $name, mixed $value): static
     {
-        if (in_array($name, $this->definedMemberNames(), true)) {
-            throw new InvalidArgument(
-                sprintf('The "%s" member is defined for this key type and is not an additional member', $name),
-            );
-        }
+        $this->checkAdditionalMemberName($name);
 
-        return clone($this, ['additionalMembers' => [...$this->additionalMembers, $name => $value]]);
+        $members = $this->additionalMembers;
+        $members[$name] = $value;
+
+        return clone($this, ['additionalMembers' => $members]);
     }
 
     /**
@@ -471,6 +471,10 @@ abstract readonly class Jwk implements JsonSerializable
      */
     private function checkCommonMembers(): void
     {
+        foreach (array_keys($this->additionalMembers) as $name) {
+            $this->checkAdditionalMemberName((string) $name);
+        }
+
         if ($this->keyId === '') {
             throw new InvalidJwk(InvalidJwkReason::InvalidValue, 'The "kid" member must not be empty', 'kid');
         }
@@ -502,6 +506,19 @@ abstract readonly class Jwk implements JsonSerializable
                 InvalidJwkReason::AlgorithmDoesNotFitKey,
                 sprintf('The algorithm "%s" does not fit %s', $this->algorithm, $this->describeType()),
                 'alg',
+            );
+        }
+    }
+
+    /**
+     * @throws InvalidArgument when the name is one the package defines for
+     *     this key, which the typed members hold instead
+     */
+    private function checkAdditionalMemberName(string $name): void
+    {
+        if (in_array($name, $this->definedMemberNames(), true)) {
+            throw new InvalidArgument(
+                sprintf('The "%s" member is defined for this key type and is not an additional member', $name),
             );
         }
     }
@@ -543,7 +560,12 @@ abstract readonly class Jwk implements JsonSerializable
             }
         }
 
-        return [...$json, ...$this->additionalMembers];
+        /** @var mixed $value */
+        foreach ($this->additionalMembers as $name => $value) {
+            $json[$name] = $value;
+        }
+
+        return $json;
     }
 
     /**

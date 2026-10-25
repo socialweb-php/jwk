@@ -27,9 +27,11 @@ use JsonException;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
+use stdClass;
 
 use function array_is_list;
 use function array_key_exists;
+use function get_object_vars;
 use function in_array;
 use function is_array;
 use function is_string;
@@ -53,9 +55,11 @@ use const JSON_THROW_ON_ERROR;
 final class MemberReader
 {
     /**
-     * @param array<string, mixed> $members
+     * @param array<array-key, mixed> $members
+     * @param bool $fromText Whether JSON text was decoded, so that an array
+     *     in the members is a JSON array and never a JSON object
      */
-    private function __construct(private readonly array $members)
+    private function __construct(private readonly array $members, private readonly bool $fromText)
     {
     }
 
@@ -66,6 +70,12 @@ final class MemberReader
      * PHP's parser keeps the lexically last of two members with one name,
      * which is one of the two behaviors RFC 7517 section 4 allows.
      *
+     * JSON text is decoded with its objects kept apart from its arrays, so
+     * `{}` and `[]` are different values. An array that was already decoded
+     * cannot tell them apart, so an empty array is read as an empty object,
+     * an empty list, or an empty list of objects, whichever the caller asks
+     * for.
+     *
      * @param string | array<array-key, mixed> $json
      *
      * @throws InvalidJwk with `MalformedJson` when the text does not parse,
@@ -73,10 +83,12 @@ final class MemberReader
      */
     public static function fromJson(string | array $json): self
     {
+        $fromText = is_string($json);
+
         if (is_string($json)) {
             try {
                 /** @var mixed $json */
-                $json = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+                $json = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
                 throw new InvalidJwk(
                     InvalidJwkReason::MalformedJson,
@@ -87,18 +99,18 @@ final class MemberReader
             }
         }
 
-        if (!is_array($json) || ($json !== [] && array_is_list($json))) {
+        if (!self::isObject($json, $fromText)) {
             throw new InvalidJwk(InvalidJwkReason::NotAnObject, 'The JSON value is not an object');
         }
 
         $members = [];
 
         /** @var mixed $value */
-        foreach ($json as $name => $value) {
+        foreach ($json instanceof stdClass ? get_object_vars($json) : $json as $name => $value) {
             $members[(string) $name] = $value;
         }
 
-        return new self($members);
+        return new self($members, $fromText);
     }
 
     /**
@@ -263,7 +275,7 @@ final class MemberReader
 
         /** @var mixed $entry */
         foreach ($value as $entry) {
-            if (!is_array($entry) || ($entry !== [] && array_is_list($entry))) {
+            if (!self::isObject($entry, $this->fromText)) {
                 throw new InvalidJwk(
                     InvalidJwkReason::WrongType,
                     sprintf('Every entry of the "%s" member must be an object', $name),
@@ -271,7 +283,7 @@ final class MemberReader
                 );
             }
 
-            $readers[] = self::fromJson($entry);
+            $readers[] = new self($entry instanceof stdClass ? get_object_vars($entry) : $entry, $this->fromText);
         }
 
         return $readers;
@@ -291,11 +303,51 @@ final class MemberReader
 
         /** @var mixed $value */
         foreach ($this->members as $name => $value) {
+            $name = (string) $name;
+
             if (!in_array($name, $names, true)) {
-                $remaining[$name] = $value;
+                $remaining[$name] = self::toArray($value);
             }
         }
 
         return $remaining;
+    }
+
+    /**
+     * Returns whether the value is a JSON object, or, when the value was not
+     * decoded from text, an array that could stand for one
+     *
+     * @phpstan-assert-if-true array<array-key, mixed> | stdClass $value
+     */
+    private static function isObject(mixed $value, bool $fromText): bool
+    {
+        if ($value instanceof stdClass) {
+            return true;
+        }
+
+        return !$fromText && is_array($value) && ($value === [] || !array_is_list($value));
+    }
+
+    /**
+     * Returns the value with every JSON object in it as an associative array
+     */
+    private static function toArray(mixed $value): mixed
+    {
+        if ($value instanceof stdClass) {
+            $value = get_object_vars($value);
+        }
+
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        $converted = [];
+
+        /** @var mixed $entry */
+        foreach ($value as $name => $entry) {
+            $converted[$name] = self::toArray($entry);
+        }
+
+        return $converted;
     }
 }
