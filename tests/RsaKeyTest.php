@@ -325,7 +325,27 @@ class RsaKeyTest extends TestCase
         yield 'p without q' => [
             ['kty' => 'RSA', 'n' => $a2['n'], 'e' => 'AQAB', 'd' => $a2['d'], 'p' => $a2['p']],
             InvalidJwkReason::InconsistentPrivateMembers,
+            'q',
+        ];
+        yield 'every CRT member but qi' => [
+            self::without($a2, ['qi']),
+            InvalidJwkReason::InconsistentPrivateMembers,
+            'qi',
+        ];
+        yield 'the CRT members without q and dq' => [
+            self::without($a2, ['q', 'dq']),
+            InvalidJwkReason::InconsistentPrivateMembers,
+            'q',
+        ];
+        yield 'the CRT members without p' => [
+            self::without($a2, ['p']),
+            InvalidJwkReason::InconsistentPrivateMembers,
             'p',
+        ];
+        yield 'the CRT members without dp' => [
+            self::without($a2, ['dp']),
+            InvalidJwkReason::InconsistentPrivateMembers,
+            'dp',
         ];
         yield 'the CRT members without d' => [
             [...self::without($a2, ['d'])],
@@ -559,6 +579,22 @@ class RsaKeyTest extends TestCase
         }
 
         $this->assertFalse(openssl_error_string());
+    }
+
+    public function testThePartialCrtMessageListsEveryCrtMember(): void
+    {
+        $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+
+        try {
+            Jwk::fromJson(self::without($a2, ['qi']));
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame('qi', $exception->member);
+            $this->assertSame(
+                'The "p", "q", "dp", "dq", and "qi" members must be all present or all absent',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testRedactsThePrivateMembersWhenDumped(): void

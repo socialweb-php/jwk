@@ -33,6 +33,7 @@ use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 use function array_filter;
 use function array_is_list;
+use function array_key_exists;
 use function array_keys;
 use function array_map;
 use function count;
@@ -373,12 +374,16 @@ final readonly class RsaKey extends Jwk
 
         $crtCount = count($privateMembers) - ($this->privateExponent === null ? 0 : 1);
 
-        if ($crtCount !== 0 && $crtCount !== 5) {
-            throw new InvalidJwk(
-                InvalidJwkReason::InconsistentPrivateMembers,
-                'The "p", "q", "dp", "dq", and "qi" members must be all present or all absent',
-                'p',
-            );
+        if ($crtCount !== 0) {
+            foreach (['p', 'q', 'dp', 'dq', 'qi'] as $name) {
+                if (!array_key_exists($name, $privateMembers)) {
+                    throw new InvalidJwk(
+                        InvalidJwkReason::InconsistentPrivateMembers,
+                        'The "p", "q", "dp", "dq", and "qi" members must be all present or all absent',
+                        $name,
+                    );
+                }
+            }
         }
 
         if ($this->privateExponent === null && $crtCount === 5) {
