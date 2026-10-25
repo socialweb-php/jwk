@@ -24,13 +24,20 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use OpenSSLAsymmetricKey;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
+use function array_key_first;
+use function count;
 use function implode;
+use function in_array;
+use function is_string;
+use function ltrim;
 use function openssl_error_string;
 use function openssl_pkey_get_details;
 use function openssl_pkey_new;
+use function sprintf;
 use function str_pad;
 
 use const STR_PAD_LEFT;
@@ -47,17 +54,29 @@ use const STR_PAD_LEFT;
  */
 final class OpenSsl
 {
+    private const array KEY_TYPES = ['rsa', 'ec', 'ed25519', 'ed448', 'x25519', 'x448'];
+
     /**
      * Builds a key from its members through `openssl_pkey_new()`
      *
-     * @param array<string, array<string, string>> $members
+     * OpenSSL generates a fresh random key, instead of failing, when the
+     * members describe no key, and it accepts some invalid values without
+     * error. So the members are checked before the call, and afterward the
+     * key must report back every member it was given.
+     *
+     * @param array<string, array<string, string>> $members One entry, named
+     *     for the key type, that holds at least one member besides
+     *     `curve_name`
      * @param InvalidJwkReason $reason The reason to report when OpenSSL
      *     refuses the members
      * @param string $member The member to name in that case
      * @param string $message The message in that case, to which OpenSSL's
      *     error text is appended when there is any
      *
-     * @throws InvalidJwk when OpenSSL refuses the members
+     * @throws InvalidArgument when the members are not one entry of a known
+     *     key type that holds a member besides `curve_name`
+     * @throws InvalidJwk when OpenSSL refuses the members, or builds a key
+     *     that does not report them back, which is a generated key
      */
     public static function build(
         array $members,
@@ -65,14 +84,42 @@ final class OpenSsl
         string $member,
         string $message,
     ): OpenSSLAsymmetricKey {
+        if (count($members) !== 1) {
+            throw new InvalidArgument('The members must hold exactly one entry, named for the key type');
+        }
+
+        $type = array_key_first($members);
+
+        if (!in_array($type, self::KEY_TYPES, true)) {
+            throw new InvalidArgument(sprintf('The entry "%s" is not a key type OpenSSL builds from members', $type));
+        }
+
+        $given = $members[$type];
+        unset($given['curve_name']);
+
+        if ($given === []) {
+            throw new InvalidArgument(sprintf('The "%s" entry must hold a member besides "curve_name"', $type));
+        }
+
         self::drainErrors();
         $key = @openssl_pkey_new($members);
 
         if ($key === false) {
-            $errors = self::drainErrors();
-
-            throw new InvalidJwk($reason, $errors === '' ? $message : $message . ': ' . $errors, $member);
+            throw self::refusal($reason, $message, $member);
         }
+
+        /** @var array<string, array<string, mixed>> $details */
+        $details = self::details($key);
+
+        foreach ($given as $name => $value) {
+            $reported = $details[$type][$name] ?? null;
+
+            if (!is_string($reported) || ltrim($reported, "\0") !== ltrim($value, "\0")) {
+                throw self::refusal($reason, $message, $member);
+            }
+        }
+
+        self::drainErrors();
 
         return $key;
     }
@@ -104,6 +151,13 @@ final class OpenSsl
         }
 
         return implode('; ', $errors);
+    }
+
+    private static function refusal(InvalidJwkReason $reason, string $message, string $member): InvalidJwk
+    {
+        $errors = self::drainErrors();
+
+        return new InvalidJwk($reason, $errors === '' ? $message : $message . ': ' . $errors, $member);
     }
 
     /**

@@ -88,8 +88,9 @@ class RsaPublicKeyInfoTest extends TestCase
 
     public function testAddsAZeroByteBeforeAnIntegerWhoseHighBitIsSet(): void
     {
-        // 30 15: SEQUENCE of 21 bytes; 30 0d ...: the algorithm identifier;
-        // 03 04 00 30 01 ...? The BIT STRING holds SEQUENCE { INTEGER 00 80, INTEGER 03 }.
+        // 30 1b: the outer SEQUENCE of 27 bytes; 30 0d ...: the algorithm
+        // identifier; 03 0a 00 ...: the BIT STRING, which holds
+        // SEQUENCE { INTEGER 00 80, INTEGER 03 }.
         $der = RsaPublicKeyInfo::der("\x80", "\x03");
 
         $this->assertSame(

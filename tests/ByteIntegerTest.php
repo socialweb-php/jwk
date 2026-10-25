@@ -137,6 +137,17 @@ class ByteIntegerTest extends TestCase
         }
     }
 
+    public function testARunOfZeroBytesIsReportedAsNonMinimal(): void
+    {
+        try {
+            ByteInteger::checkRsaMember('n', "\0\0");
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::NonMinimalInteger, $exception->reason);
+            $this->assertSame('n', $exception->member);
+        }
+    }
+
     public function testAZeroRsaMemberIsAnInvalidValue(): void
     {
         try {

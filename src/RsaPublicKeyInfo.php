@@ -115,7 +115,7 @@ final class RsaPublicKeyInfo
             return pack('C', $length);
         }
 
-        $bytes = ltrim(pack('N', $length), "\0");
+        $bytes = ltrim(pack('J', $length), "\0");
 
         return pack('C', 0x80 | strlen($bytes)) . $bytes;
     }
