@@ -28,6 +28,7 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use stdClass;
 
+use function array_is_list;
 use function array_pop;
 use function get_debug_type;
 use function get_object_vars;
@@ -36,14 +37,9 @@ use function is_finite;
 use function is_float;
 use function is_int;
 use function is_string;
-use function json_decode;
-use function json_encode;
 use function preg_match;
 use function sprintf;
 use function str_starts_with;
-
-use const JSON_PRESERVE_ZERO_FRACTION;
-use const JSON_THROW_ON_ERROR;
 
 /**
  * Reads a JSON value into the form the package keeps it in
@@ -51,8 +47,10 @@ use const JSON_THROW_ON_ERROR;
  * The form is what `json_decode()` gives by default: a JSON object as a
  * `stdClass`, a JSON array as a PHP list, and a scalar as a PHP scalar. A
  * PHP array that is a list, including an empty array, is read as a JSON
- * array, and any other PHP array as a JSON object. Reading always builds a
- * new value, so a key never shares an object with its caller.
+ * array, and any other PHP array as a JSON object. An object is a JSON
+ * object only when its class is `stdClass` itself, not a subclass. Reading
+ * always builds a new value, so a key never shares an object with its
+ * caller.
  *
  * Reading refuses what JSON cannot hold, so that every key the package
  * accepts can be written as JSON text: a string or a member name that is
@@ -97,75 +95,83 @@ final class JsonValue
     }
 
     /**
-     * Returns the value of a member in the package's form
+     * Returns a copy of the value of a member in the package's form,
+     * checking it as it goes
      *
-     * The value is copied by encoding and decoding it, which builds the
-     * form `json_decode()` gives without a PHP call for each level of
-     * nesting. A scalar comes back as it was.
-     *
-     * @param string $member The name of the member that holds the value
-     *
-     * @throws InvalidJwk as `check()` does
-     */
-    public static function read(string $member, #[SensitiveParameter] mixed $value): mixed
-    {
-        self::check($member, $value);
-
-        return json_decode(json_encode($value, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR));
-    }
-
-    /**
-     * Checks that the value of a member is a JSON value that JSON text can
-     * hold, one container at a time, without a PHP call for each level of
-     * nesting
-     *
-     * The value is a member of a JWK, so its outermost container is at
-     * depth 2.
+     * The value is walked one container at a time, without a PHP call for
+     * each level of nesting. The value is a member of a JWK, which is
+     * depth 1, so the value's outermost container is at depth 2.
      *
      * @param string $member The name of the member that holds the value,
      *     which every refusal names
      *
      * @throws InvalidJwk with `InvalidValue` for a string that is not valid
      *     UTF-8 or a number that is not finite; with `WrongType` for a
-     *     value of a PHP type that is not a JSON type; or with
-     *     `MalformedJson` for a member name that `checkName()` refuses or
-     *     for objects and arrays nested deeper than `json_decode()` reads
-     *     JSON text
+     *     value of a PHP type that is not a JSON type, including an object
+     *     whose class is not `stdClass`; or with `MalformedJson` for a
+     *     member name that `checkName()` refuses or for objects and arrays
+     *     nested deeper than `json_decode()` reads JSON text
      */
-    public static function check(string $member, #[SensitiveParameter] mixed $value): void
+    public static function read(string $member, #[SensitiveParameter] mixed $value): mixed
     {
-        /** @var list<array{mixed, int}> $pending */
-        $pending = [[$value, 1]];
+        $copy = null;
+        $pending = [[$value, 2, &$copy]];
 
         while (($next = array_pop($pending)) !== null) {
             [$current, $depth] = $next;
+            $target = &$next[2];
 
-            if ($current instanceof stdClass) {
-                $current = get_object_vars($current);
-            }
+            if ($current instanceof stdClass && $current::class === stdClass::class) {
+                self::checkDepth($depth);
+                $object = new stdClass();
+                $target = $object;
 
-            if (is_array($current)) {
-                if ($depth >= self::MAX_DEPTH) {
-                    throw new InvalidJwk(
-                        InvalidJwkReason::MalformedJson,
-                        'The JSON text does not parse: Maximum stack depth exceeded',
-                    );
+                /** @var mixed $entry */
+                foreach (get_object_vars($current) as $name => $entry) {
+                    self::checkName((string) $name, $member);
+                    $object->{$name} = null;
+                    $pending[] = [$entry, $depth + 1, &$object->{$name}];
                 }
+            } elseif (is_array($current) && array_is_list($current)) {
+                self::checkDepth($depth);
+                $target = [];
+
+                /** @var mixed $entry */
+                foreach ($current as $index => $entry) {
+                    $target[$index] = null;
+                    $pending[] = [$entry, $depth + 1, &$target[$index]];
+                }
+            } elseif (is_array($current)) {
+                self::checkDepth($depth);
+                $object = new stdClass();
+                $target = $object;
 
                 /** @var mixed $entry */
                 foreach ($current as $name => $entry) {
-                    if (is_string($name)) {
-                        self::checkName($name, $member);
-                    }
-
-                    $pending[] = [$entry, $depth + 1];
+                    self::checkName((string) $name, $member);
+                    $object->{$name} = null;
+                    $pending[] = [$entry, $depth + 1, &$object->{$name}];
                 }
-
-                continue;
+            } else {
+                self::checkScalar($member, $current);
+                $target = $current;
             }
 
-            self::checkScalar($member, $current);
+            unset($target);
         }
+
+        return $copy;
+    }
+
+    /**
+     * Checks that the value of a member is a JSON value that JSON text can
+     * hold, as `read()` does
+     *
+     * @throws InvalidJwk as `read()` does
+     */
+    public static function check(string $member, #[SensitiveParameter] mixed $value): void
+    {
+        self::read($member, $value);
     }
 
     /**
@@ -192,6 +198,22 @@ final class JsonValue
                 InvalidJwkReason::MalformedJson,
                 sprintf('A member name%s is not valid UTF-8', $where),
                 $member,
+            );
+        }
+    }
+
+    /**
+     * @param int $depth The depth of an object or array, the JWK itself
+     *     being depth 1
+     *
+     * @throws InvalidJwk
+     */
+    private static function checkDepth(int $depth): void
+    {
+        if ($depth > self::MAX_DEPTH) {
+            throw new InvalidJwk(
+                InvalidJwkReason::MalformedJson,
+                'The JSON text does not parse: Maximum stack depth exceeded',
             );
         }
     }

@@ -743,6 +743,12 @@ class JwkTest extends TestCase
                 'x',
             ],
             [
+                static fn (): OctKey => $key->withAdditionalMember('x', new class extends stdClass {
+                }),
+                InvalidJwkReason::WrongType,
+                'x',
+            ],
+            [
                 static fn (): OctKey => new OctKey("\x01", additionalMembers: ['x' => (object) ['y' => [$key]]]),
                 InvalidJwkReason::WrongType,
                 'x',

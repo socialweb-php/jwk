@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace SocialWeb\Test\Jwk;
 
 use DateTimeImmutable;
+use JsonSerializable;
 use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\JsonValue;
+use SocialWeb\Jwk\KeyUse;
 use stdClass;
 
 use function fclose;
 use function fopen;
+use function get_debug_type;
 use function get_object_vars;
+use function ini_set;
 use function json_encode;
 
 use const INF;
@@ -194,5 +198,101 @@ class JsonValueTest extends TestCase
         $this->assertSame(1, $members["a\0"]);
         $this->assertInstanceOf(stdClass::class, $members['b']);
         $this->assertSame(["b\0" => 2], get_object_vars($members['b']));
+    }
+
+    /**
+     * @return iterable<string, array{object}>
+     */
+    public static function objectThatIsNotAStdClassProvider(): iterable
+    {
+        yield 'a subclass whose JSON form is NAN' => [
+            new class extends stdClass implements JsonSerializable {
+                public function jsonSerialize(): mixed
+                {
+                    return NAN;
+                }
+            },
+        ];
+        yield 'a subclass whose JSON form is a date' => [
+            new class extends stdClass implements JsonSerializable {
+                public function jsonSerialize(): mixed
+                {
+                    return new DateTimeImmutable('2020-01-01');
+                }
+            },
+        ];
+        yield 'a subclass with a private property' => [
+            new class extends stdClass {
+                public int $shown = 1;
+
+                private string $hidden = 'hidden';
+
+                public function hidden(): string
+                {
+                    return $this->hidden;
+                }
+            },
+        ];
+        yield 'an enum case' => [KeyUse::Signature];
+    }
+
+    #[DataProvider('objectThatIsNotAStdClassProvider')]
+    public function testRefusesAnObjectWhoseClassIsNotStdClass(object $object): void
+    {
+        foreach ([$object, [$object], (object) ['a' => $object]] as $value) {
+            try {
+                JsonValue::read('m', $value);
+                $this->fail('Expected InvalidJwk');
+            } catch (InvalidJwk $exception) {
+                $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+                $this->assertSame('m', $exception->member);
+                $this->assertSame(
+                    'The "m" member holds a value that is not a JSON value: ' . get_debug_type($object),
+                    $exception->getMessage(),
+                );
+            }
+        }
+    }
+
+    public function testCopiesNumbersExactlyWhateverTheSerializePrecision(): void
+    {
+        $previous = ini_set('serialize_precision', '5');
+
+        try {
+            $value = JsonValue::read('m', [0.1234567890123, -0.0, ['a' => 1.0e300]]);
+        } finally {
+            ini_set('serialize_precision', $previous === false ? '-1' : $previous);
+        }
+
+        $this->assertIsArray($value);
+        $this->assertSame(0.1234567890123, $value[0]);
+        $this->assertSame(-0.0, $value[1]);
+        $this->assertSame('-0', (string) $value[1]);
+        $this->assertEquals([0.1234567890123, -0.0, (object) ['a' => 1.0e300]], $value);
+    }
+
+    public function testACopyIsIndependentOfTheValueAndOfItself(): void
+    {
+        $object = new stdClass();
+        $object->list = [1, [2]];
+        $copy = JsonValue::read('m', ['o' => $object]);
+        $object->list[1][0] = 3;
+
+        $this->assertInstanceOf(stdClass::class, $copy);
+        $this->assertSame('{"o":{"list":[1,[2]]}}', json_encode($copy, JSON_THROW_ON_ERROR));
+        $this->assertNotSame($object, $copy->o);
+    }
+
+    public function testRefusesAnObjectThatHoldsItself(): void
+    {
+        $object = new stdClass();
+        $object->self = $object;
+
+        try {
+            JsonValue::read('m', $object);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+        }
     }
 }
