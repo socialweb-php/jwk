@@ -1,0 +1,67 @@
+<?php
+
+/**
+ * This file is part of socialweb/jwk
+ *
+ * socialweb/jwk is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or (at your
+ * option) any later version.
+ *
+ * socialweb/jwk is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with socialweb/jwk. If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace SocialWeb\Jwk;
+
+use JsonSerializable;
+use SensitiveParameter;
+use SocialWeb\Jwk\Exception\InvalidJwk;
+
+/**
+ * One entry of the `oth` member of an RSA private key, per RFC 7518
+ * section 6.3.2.7: a third or later prime factor with its CRT values
+ */
+final readonly class OtherPrimeInfo implements JsonSerializable
+{
+    /**
+     * @param string $primeFactor The `r` member, as unsigned big-endian bytes
+     * @param string $factorCrtExponent The `d` member
+     * @param string $factorCrtCoefficient The `t` member
+     *
+     * @throws InvalidJwk when a member is empty, zero, or not minimal
+     */
+    public function __construct(
+        #[SensitiveParameter]
+        public string $primeFactor,
+        #[SensitiveParameter]
+        public string $factorCrtExponent,
+        #[SensitiveParameter]
+        public string $factorCrtCoefficient,
+    ) {
+        ByteInteger::checkRsaMember('r', $primeFactor);
+        ByteInteger::checkRsaMember('d', $factorCrtExponent);
+        ByteInteger::checkRsaMember('t', $factorCrtCoefficient);
+    }
+
+    /**
+     * @return array{r: string, d: string, t: string}
+     */
+    public function jsonSerialize(): array
+    {
+        return [
+            'r' => Base64Url::encode($this->primeFactor),
+            'd' => Base64Url::encode($this->factorCrtExponent),
+            't' => Base64Url::encode($this->factorCrtCoefficient),
+        ];
+    }
+}
