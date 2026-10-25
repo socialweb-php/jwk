@@ -14,6 +14,7 @@ use SocialWeb\Jwk\KeyType;
 use SocialWeb\Jwk\OkpKey;
 
 use function array_keys;
+use function openssl_error_string;
 use function openssl_pkey_get_details;
 use function openssl_verify;
 use function print_r;
@@ -245,6 +246,8 @@ class OkpKeyTest extends TestCase
             'x',
         ];
         yield 'a crv that is not a string' => [[...$a1, 'crv' => 25519], InvalidJwkReason::WrongType, 'crv'];
+        yield 'an x that is a number' => [[...$a1, 'x' => 1], InvalidJwkReason::WrongType, 'x'];
+        yield 'a d that is an array' => [[...$a1, 'd' => []], InvalidJwkReason::WrongType, 'd'];
     }
 
     /**
@@ -260,6 +263,20 @@ class OkpKeyTest extends TestCase
             $this->assertSame($reason, $exception->reason);
             $this->assertSame($member, $exception->member);
         }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testAParsedX25519PrivateKeyLeavesNoOpenSslError(): void
+    {
+        $key = new OkpKey(
+            Curve::X25519,
+            self::hex(self::X25519_ALICE_PUBLIC),
+            self::hex(self::X25519_ALICE_SECRET),
+        );
+
+        $this->assertTrue($key->isPrivate());
+        $this->assertFalse(openssl_error_string());
     }
 
     public function testTheMessagesNameTheCurveAndTheMembers(): void
