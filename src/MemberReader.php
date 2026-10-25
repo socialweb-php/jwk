@@ -57,9 +57,16 @@ final class MemberReader
     /**
      * @param array<array-key, mixed> $members Every value as `JsonValue`
      *     reads it
+     * @param ?string $entry Where the object is when it is an entry of a
+     *     list, such as `entry 2 of "oth"`, for the messages
+     * @param ?string $list The top-level member that holds the list, which
+     *     the errors of an entry name
      */
-    private function __construct(#[SensitiveParameter] private readonly array $members)
-    {
+    private function __construct(
+        #[SensitiveParameter] private readonly array $members,
+        private readonly ?string $entry = null,
+        private readonly ?string $list = null,
+    ) {
     }
 
     /**
@@ -131,8 +138,8 @@ final class MemberReader
         if (!is_string($value)) {
             throw new InvalidJwk(
                 InvalidJwkReason::WrongType,
-                sprintf('The "%s" member must be a string', $name),
-                $name,
+                sprintf('The %s must be a string', $this->describe($name)),
+                $this->report($name),
             );
         }
 
@@ -149,8 +156,8 @@ final class MemberReader
     {
         return $this->string($name) ?? throw new InvalidJwk(
             InvalidJwkReason::MissingMember,
-            sprintf('The "%s" member is required', $name),
-            $name,
+            sprintf('The %s is required', $this->describe($name)),
+            $this->report($name),
         );
     }
 
@@ -175,8 +182,12 @@ final class MemberReader
         } catch (InvalidArgument $exception) {
             throw new InvalidJwk(
                 InvalidJwkReason::InvalidBase64Url,
-                sprintf('The "%s" member is not base64url without padding: %s', $name, $exception->getMessage()),
-                $name,
+                sprintf(
+                    'The %s is not base64url without padding: %s',
+                    $this->describe($name),
+                    $exception->getMessage(),
+                ),
+                $this->report($name),
                 $exception,
             );
         }
@@ -192,8 +203,8 @@ final class MemberReader
     {
         return $this->bytes($name) ?? throw new InvalidJwk(
             InvalidJwkReason::MissingMember,
-            sprintf('The "%s" member is required', $name),
-            $name,
+            sprintf('The %s is required', $this->describe($name)),
+            $this->report($name),
         );
     }
 
@@ -217,8 +228,8 @@ final class MemberReader
         if (!is_array($value)) {
             throw new InvalidJwk(
                 InvalidJwkReason::WrongType,
-                sprintf('The "%s" member must be an array', $name),
-                $name,
+                sprintf('The %s must be an array', $this->describe($name)),
+                $this->report($name),
             );
         }
 
@@ -229,8 +240,8 @@ final class MemberReader
             if (!is_string($entry)) {
                 throw new InvalidJwk(
                     InvalidJwkReason::WrongType,
-                    sprintf('Every entry of the "%s" member must be a string', $name),
-                    $name,
+                    sprintf('Every entry of the %s must be a string', $this->describe($name)),
+                    $this->report($name),
                 );
             }
 
@@ -260,27 +271,41 @@ final class MemberReader
         if (!is_array($value)) {
             throw new InvalidJwk(
                 InvalidJwkReason::WrongType,
-                sprintf('The "%s" member must be an array', $name),
-                $name,
+                sprintf('The %s must be an array', $this->describe($name)),
+                $this->report($name),
             );
         }
 
         $readers = [];
+        $list = $this->entry === null ? sprintf('"%s"', $name) : sprintf('"%s" of %s', $name, $this->entry);
 
         /** @var mixed $entry */
-        foreach ($value as $entry) {
+        foreach ($value as $index => $entry) {
             if (!$entry instanceof stdClass) {
                 throw new InvalidJwk(
                     InvalidJwkReason::WrongType,
-                    sprintf('Every entry of the "%s" member must be an object', $name),
-                    $name,
+                    sprintf('Every entry of the %s must be an object', $this->describe($name)),
+                    $this->report($name),
                 );
             }
 
-            $readers[] = new self(get_object_vars($entry));
+            $readers[] = new self(
+                get_object_vars($entry),
+                sprintf('entry %d of %s', $index + 1, $list),
+                $this->report($name),
+            );
         }
 
         return $readers;
+    }
+
+    /**
+     * Returns where the object is when it is an entry of a list, such as
+     * `entry 2 of "oth"`, or `null` for the JWK itself
+     */
+    public function entry(): ?string
+    {
+        return $this->entry;
     }
 
     /**
@@ -306,5 +331,25 @@ final class MemberReader
         }
 
         return $remaining;
+    }
+
+    /**
+     * Returns the member as the messages name it: `"r" member`, or
+     * `"r" member of entry 2 of "oth"` in an entry of a list
+     */
+    private function describe(string $name): string
+    {
+        return $this->entry === null
+            ? sprintf('"%s" member', $name)
+            : sprintf('"%s" member of %s', $name, $this->entry);
+    }
+
+    /**
+     * Returns the member an error names: the member itself, or, in an entry
+     * of a list, the top-level member that holds the list
+     */
+    private function report(string $name): string
+    {
+        return $this->list ?? $name;
     }
 }

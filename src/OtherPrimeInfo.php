@@ -29,6 +29,8 @@ use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
+use function sprintf;
+
 /**
  * One entry of the `oth` member of an RSA private key, per RFC 7518
  * section 6.3.2.7: a third or later prime factor with its CRT values
@@ -40,8 +42,9 @@ final readonly class OtherPrimeInfo implements JsonSerializable
      * @param string $factorCrtExponent The `d` member
      * @param string $factorCrtCoefficient The `t` member
      *
-     * @throws InvalidJwk when a member is empty, zero, or not minimal, or
-     *     when the prime factor is 1
+     * @throws InvalidJwk naming the `oth` member when a member is empty,
+     *     zero, or not minimal, or when the prime factor is 1; the message
+     *     names the member of the entry
      */
     public function __construct(
         #[SensitiveParameter]
@@ -51,17 +54,32 @@ final readonly class OtherPrimeInfo implements JsonSerializable
         #[SensitiveParameter]
         public string $factorCrtCoefficient,
     ) {
-        ByteInteger::checkRsaMember('r', $primeFactor);
-        ByteInteger::checkRsaMember('d', $factorCrtExponent);
-        ByteInteger::checkRsaMember('t', $factorCrtCoefficient);
+        self::checkMembers($primeFactor, $factorCrtExponent, $factorCrtCoefficient, 'an "oth" entry');
+    }
 
-        if ($primeFactor === "\x01") {
-            throw new InvalidJwk(
-                InvalidJwkReason::InvalidValue,
-                'The "r" member must be a prime, and 1 is not a prime',
-                'r',
-            );
-        }
+    /**
+     * Reads an entry of the `oth` member, naming its position in every
+     * message, such as `The "d" member of entry 2 of "oth"`
+     *
+     * @internal
+     *
+     * @throws InvalidJwk naming the `oth` member, as the constructor does,
+     *     or when a member is absent, is not a string, or is not base64url
+     */
+    public static function fromMembers(#[SensitiveParameter] MemberReader $members): self
+    {
+        $primeFactor = $members->requiredBytes('r');
+        $factorCrtExponent = $members->requiredBytes('d');
+        $factorCrtCoefficient = $members->requiredBytes('t');
+
+        self::checkMembers(
+            $primeFactor,
+            $factorCrtExponent,
+            $factorCrtCoefficient,
+            $members->entry() ?? 'an "oth" entry',
+        );
+
+        return new self($primeFactor, $factorCrtExponent, $factorCrtCoefficient);
     }
 
     /**
@@ -97,6 +115,30 @@ final readonly class OtherPrimeInfo implements JsonSerializable
     public function __serialize(): array
     {
         throw new LogicException('An "oth" entry cannot be serialized with serialize(); use the toJson() of its key');
+    }
+
+    /**
+     * @param string $entry Which entry, as the messages name it
+     *
+     * @throws InvalidJwk
+     */
+    private static function checkMembers(
+        #[SensitiveParameter] string $primeFactor,
+        #[SensitiveParameter] string $factorCrtExponent,
+        #[SensitiveParameter] string $factorCrtCoefficient,
+        string $entry,
+    ): void {
+        ByteInteger::checkRsaMember('oth', $primeFactor, sprintf('"r" member of %s', $entry));
+        ByteInteger::checkRsaMember('oth', $factorCrtExponent, sprintf('"d" member of %s', $entry));
+        ByteInteger::checkRsaMember('oth', $factorCrtCoefficient, sprintf('"t" member of %s', $entry));
+
+        if ($primeFactor === "\x01") {
+            throw new InvalidJwk(
+                InvalidJwkReason::InvalidValue,
+                sprintf('The "r" member of %s must be a prime, and 1 is not a prime', $entry),
+                'oth',
+            );
+        }
     }
 
     /**

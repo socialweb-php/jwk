@@ -70,15 +70,24 @@ final class ByteInteger
      * Checks that the bytes are a Base64urlUInt an RSA member may hold:
      * present, minimal, and not zero
      *
+     * @param string $member The member the error names
+     * @param ?string $described The member as the messages name it, such
+     *     as `"d" member of entry 2 of "oth"`; by default `"<member>" member`
+     *
      * @throws InvalidJwk with `InvalidValue` for an empty or zero value, or
      *     with `NonMinimalInteger` for a leading zero byte
      */
-    public static function checkRsaMember(string $member, #[SensitiveParameter] string $bytes): void
-    {
+    public static function checkRsaMember(
+        string $member,
+        #[SensitiveParameter] string $bytes,
+        ?string $described = null,
+    ): void {
+        $described ??= sprintf('"%s" member', $member);
+
         if ($bytes === '') {
             throw new InvalidJwk(
                 InvalidJwkReason::InvalidValue,
-                sprintf('The "%s" member must not be empty', $member),
+                sprintf('The %s must not be empty', $described),
                 $member,
             );
         }
@@ -86,7 +95,7 @@ final class ByteInteger
         if (!self::isMinimal($bytes)) {
             throw new InvalidJwk(
                 InvalidJwkReason::NonMinimalInteger,
-                sprintf('The "%s" member has a leading zero byte, so it is not a minimal Base64urlUInt', $member),
+                sprintf('The %s has a leading zero byte, so it is not a minimal Base64urlUInt', $described),
                 $member,
             );
         }
@@ -94,7 +103,7 @@ final class ByteInteger
         if (self::isZero($bytes)) {
             throw new InvalidJwk(
                 InvalidJwkReason::InvalidValue,
-                sprintf('The "%s" member must not be zero', $member),
+                sprintf('The %s must not be zero', $described),
                 $member,
             );
         }

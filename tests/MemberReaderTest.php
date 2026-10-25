@@ -469,4 +469,112 @@ class MemberReaderTest extends TestCase
             );
         }
     }
+
+    public function testAnEntryOfAnObjectListKnowsItsPosition(): void
+    {
+        $readers = MemberReader::fromJson('{"oth":[{},{"x":[{}]}]}')->objectList('oth');
+
+        $this->assertNull(MemberReader::fromJson('{}')->entry());
+        $this->assertSame('entry 1 of "oth"', $readers[0]->entry());
+        $this->assertSame('entry 2 of "oth"', $readers[1]->entry());
+        $this->assertSame('entry 1 of "x" of entry 2 of "oth"', $readers[1]->objectList('x')[0]->entry());
+    }
+
+    /**
+     * @return iterable<string, array{string, string, InvalidJwkReason, string}>
+     */
+    public static function entryErrorProvider(): iterable
+    {
+        yield 'a missing string' => [
+            '{}',
+            'requiredString',
+            InvalidJwkReason::MissingMember,
+            'The "r" member of entry 1 of "oth" is required',
+        ];
+        yield 'a missing byte string' => [
+            '{}',
+            'requiredBytes',
+            InvalidJwkReason::MissingMember,
+            'The "r" member of entry 1 of "oth" is required',
+        ];
+        yield 'a string of the wrong type' => [
+            '{"r":1}',
+            'string',
+            InvalidJwkReason::WrongType,
+            'The "r" member of entry 1 of "oth" must be a string',
+        ];
+        yield 'bytes that are not base64url' => [
+            '{"r":"A="}',
+            'bytes',
+            InvalidJwkReason::InvalidBase64Url,
+            'The "r" member of entry 1 of "oth" is not base64url without padding: '
+            . 'The text has a character outside the base64url alphabet',
+        ];
+        yield 'a string list that is not an array' => [
+            '{"r":1}',
+            'stringList',
+            InvalidJwkReason::WrongType,
+            'The "r" member of entry 1 of "oth" must be an array',
+        ];
+        yield 'a string list entry of the wrong type' => [
+            '{"r":[1]}',
+            'stringList',
+            InvalidJwkReason::WrongType,
+            'Every entry of the "r" member of entry 1 of "oth" must be a string',
+        ];
+        yield 'an object list that is not an array' => [
+            '{"r":1}',
+            'objectList',
+            InvalidJwkReason::WrongType,
+            'The "r" member of entry 1 of "oth" must be an array',
+        ];
+        yield 'an object list entry of the wrong type' => [
+            '{"r":[1]}',
+            'objectList',
+            InvalidJwkReason::WrongType,
+            'Every entry of the "r" member of entry 1 of "oth" must be an object',
+        ];
+    }
+
+    #[DataProvider('entryErrorProvider')]
+    public function testAnErrorInAnEntryNamesTheListAndThePosition(
+        string $entry,
+        string $method,
+        InvalidJwkReason $reason,
+        string $message,
+    ): void {
+        $reader = MemberReader::fromJson('{"oth":[' . $entry . ']}')->objectList('oth')[0];
+
+        try {
+            match ($method) {
+                'requiredString' => $reader->requiredString('r'),
+                'requiredBytes' => $reader->requiredBytes('r'),
+                'string' => $reader->string('r'),
+                'bytes' => $reader->bytes('r'),
+                'stringList' => $reader->stringList('r'),
+                default => $reader->objectList('r'),
+            };
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame($reason, $exception->reason);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame($message, $exception->getMessage());
+        }
+    }
+
+    public function testAnErrorInANestedEntryNamesTheTopLevelList(): void
+    {
+        $reader = MemberReader::fromJson('{"oth":[{"x":[{}]}]}')->objectList('oth')[0]->objectList('x')[0];
+
+        try {
+            $reader->requiredString('r');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame(
+                'The "r" member of entry 1 of "x" of entry 1 of "oth" is required',
+                $exception->getMessage(),
+            );
+        }
+    }
 }

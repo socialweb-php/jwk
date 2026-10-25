@@ -7,6 +7,7 @@ namespace SocialWeb\Test\Jwk;
 use LogicException;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
+use SocialWeb\Jwk\MemberReader;
 use SocialWeb\Jwk\OtherPrimeInfo;
 
 use function print_r;
@@ -34,7 +35,8 @@ class OtherPrimeInfoTest extends TestCase
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
-            $this->assertSame('r', $exception->member);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame('The "r" member of an "oth" entry must not be empty', $exception->getMessage());
         }
     }
 
@@ -45,7 +47,11 @@ class OtherPrimeInfoTest extends TestCase
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::NonMinimalInteger, $exception->reason);
-            $this->assertSame('d', $exception->member);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame(
+                'The "d" member of an "oth" entry has a leading zero byte, so it is not a minimal Base64urlUInt',
+                $exception->getMessage(),
+            );
         }
     }
 
@@ -56,7 +62,8 @@ class OtherPrimeInfoTest extends TestCase
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
-            $this->assertSame('t', $exception->member);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame('The "t" member of an "oth" entry must not be zero', $exception->getMessage());
         }
     }
 
@@ -67,8 +74,32 @@ class OtherPrimeInfoTest extends TestCase
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
-            $this->assertSame('r', $exception->member);
-            $this->assertSame('The "r" member must be a prime, and 1 is not a prime', $exception->getMessage());
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame(
+                'The "r" member of an "oth" entry must be a prime, and 1 is not a prime',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testReadsAnEntryFromItsMembers(): void
+    {
+        $info = OtherPrimeInfo::fromMembers(MemberReader::fromJson('{"r":"AQI","d":"Aw","t":"BAUG"}'));
+
+        $this->assertSame(['r' => 'AQI', 'd' => 'Aw', 't' => 'BAUG'], $info->jsonSerialize());
+    }
+
+    public function testAnEntryReadAloneIsNamedAsAnEntry(): void
+    {
+        try {
+            OtherPrimeInfo::fromMembers(MemberReader::fromJson('{"r":"AQ","d":"Aw","t":"BA"}'));
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame(
+                'The "r" member of an "oth" entry must be a prime, and 1 is not a prime',
+                $exception->getMessage(),
+            );
         }
     }
 

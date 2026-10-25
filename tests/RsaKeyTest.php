@@ -361,7 +361,7 @@ class RsaKeyTest extends TestCase
         yield 'an oth entry without r' => [
             [...$a2, 'oth' => [['d' => 'AQ', 't' => 'AQ']]],
             InvalidJwkReason::MissingMember,
-            'r',
+            'oth',
         ];
         yield 'a zero private exponent' => [[...$a2, 'd' => 'AA'], InvalidJwkReason::InvalidValue, 'd'];
         yield 'a public exponent equal to the modulus' => [
@@ -380,8 +380,74 @@ class RsaKeyTest extends TestCase
         yield 'an oth prime of one' => [
             [...$threePrimes, 'oth' => [['r' => 'AQ', 'd' => 'AQ', 't' => 'AQ']]],
             InvalidJwkReason::InvalidValue,
-            'r',
+            'oth',
         ];
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string}>
+     */
+    public static function otherPrimeEntryProvider(): iterable
+    {
+        yield 'a missing r' => [
+            ['d' => 'AQ', 't' => 'AQ'],
+            InvalidJwkReason::MissingMember,
+            'The "r" member of entry 2 of "oth" is required',
+        ];
+        yield 'a d that is not a string' => [
+            ['r' => 'Aw', 'd' => 1, 't' => 'AQ'],
+            InvalidJwkReason::WrongType,
+            'The "d" member of entry 2 of "oth" must be a string',
+        ];
+        yield 'a t that is not base64url' => [
+            ['r' => 'Aw', 'd' => 'AQ', 't' => 'A+'],
+            InvalidJwkReason::InvalidBase64Url,
+            'The "t" member of entry 2 of "oth" is not base64url without padding: '
+            . 'The text has a character outside the base64url alphabet',
+        ];
+        yield 'a d that is not minimal' => [
+            ['r' => 'Aw', 'd' => 'AAE', 't' => 'AQ'],
+            InvalidJwkReason::NonMinimalInteger,
+            'The "d" member of entry 2 of "oth" has a leading zero byte, so it is not a minimal Base64urlUInt',
+        ];
+        yield 'a zero t' => [
+            ['r' => 'Aw', 'd' => 'AQ', 't' => 'AA'],
+            InvalidJwkReason::InvalidValue,
+            'The "t" member of entry 2 of "oth" must not be zero',
+        ];
+        yield 'an empty r' => [
+            ['r' => '', 'd' => 'AQ', 't' => 'AQ'],
+            InvalidJwkReason::InvalidValue,
+            'The "r" member of entry 2 of "oth" must not be empty',
+        ];
+        yield 'an r of one' => [
+            ['r' => 'AQ', 'd' => 'AQ', 't' => 'AQ'],
+            InvalidJwkReason::InvalidValue,
+            'The "r" member of entry 2 of "oth" must be a prime, and 1 is not a prime',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    #[DataProvider('otherPrimeEntryProvider')]
+    public function testAnErrorInAnOthEntryNamesOthAndThePosition(
+        array $entry,
+        InvalidJwkReason $reason,
+        string $message,
+    ): void {
+        $threePrimes = self::fixture('generated/rsa-three-primes.json');
+        /** @var list<array<string, string>> $oth */
+        $oth = $threePrimes['oth'];
+
+        try {
+            Jwk::fromJson([...$threePrimes, 'oth' => [$oth[0], $entry]]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame($reason, $exception->reason);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame($message, $exception->getMessage());
+        }
     }
 
     /**

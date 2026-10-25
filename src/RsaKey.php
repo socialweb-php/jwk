@@ -194,11 +194,7 @@ final readonly class RsaKey extends Jwk
         $otherPrimesInfo = [];
 
         foreach ($members->objectList('oth') as $info) {
-            $otherPrimesInfo[] = new OtherPrimeInfo(
-                $info->requiredBytes('r'),
-                $info->requiredBytes('d'),
-                $info->requiredBytes('t'),
-            );
+            $otherPrimesInfo[] = OtherPrimeInfo::fromMembers($info);
         }
 
         return new self(
