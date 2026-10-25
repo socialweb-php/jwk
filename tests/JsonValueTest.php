@@ -295,4 +295,41 @@ class JsonValueTest extends TestCase
             $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
         }
     }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed> | stdClass}>
+     */
+    public static function notAnObjectProvider(): iterable
+    {
+        yield 'a PHP list' => [[1, 2]];
+        yield 'an empty PHP array' => [[]];
+        yield 'a subclass of stdClass' => [
+            new class extends stdClass {
+                public string $kty = 'oct';
+            },
+        ];
+    }
+
+    /**
+     * @param array<array-key, mixed> | stdClass $object
+     */
+    #[DataProvider('notAnObjectProvider')]
+    public function testReadMembersRefusesWhatIsNotAJsonObject(array | stdClass $object): void
+    {
+        try {
+            JsonValue::readMembers($object);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::NotAnObject, $exception->reason);
+            $this->assertNull($exception->member);
+            $this->assertSame('The JSON value is not an object', $exception->getMessage());
+        }
+    }
+
+    public function testReadMembersReadsAnArrayThatIsNotAListAndAStdClass(): void
+    {
+        $this->assertSame(['1' => 'a', '0' => 'b'], JsonValue::readMembers([1 => 'a', 0 => 'b']));
+        $this->assertSame(['0' => 'a', '1' => 'b'], JsonValue::readMembers((object) ['a', 'b']));
+        $this->assertSame([], JsonValue::readMembers(new stdClass()));
+    }
 }

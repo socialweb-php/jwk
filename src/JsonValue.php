@@ -78,10 +78,16 @@ final class JsonValue
      *
      * @return array<string, mixed>
      *
-     * @throws InvalidJwk as `checkName()` and `read()` do
+     * @throws InvalidJwk with `NotAnObject` for a PHP list, which is a JSON
+     *     array, or for an object whose class is not `stdClass`; otherwise
+     *     as `checkName()` and `read()` do
      */
     public static function readMembers(#[SensitiveParameter] array | stdClass $object): array
     {
+        if (is_array($object) ? array_is_list($object) : $object::class !== stdClass::class) {
+            throw new InvalidJwk(InvalidJwkReason::NotAnObject, 'The JSON value is not an object');
+        }
+
         $members = [];
 
         /** @var mixed $value */

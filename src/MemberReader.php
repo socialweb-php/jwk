@@ -30,7 +30,6 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use stdClass;
 
-use function array_is_list;
 use function array_key_exists;
 use function get_object_vars;
 use function in_array;
@@ -101,7 +100,7 @@ final class MemberReader
             }
         }
 
-        if (!$json instanceof stdClass && (!is_array($json) || array_is_list($json))) {
+        if (!$json instanceof stdClass && !is_array($json)) {
             throw new InvalidJwk(InvalidJwkReason::NotAnObject, 'The JSON value is not an object');
         }
 
