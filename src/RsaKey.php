@@ -39,6 +39,9 @@ use function openssl_pkey_get_public;
 use function openssl_sign;
 use function openssl_verify;
 use function ord;
+use function sprintf;
+use function strcmp;
+use function strlen;
 
 use const OPENSSL_ALGO_SHA256;
 
@@ -81,7 +84,8 @@ final readonly class RsaKey extends Jwk
      *
      * @throws InvalidJwk with `NonMinimalInteger` or `InvalidValue` for a
      *     member that is not a Base64urlUInt of a positive value, for an even
-     *     modulus, or for a public exponent that is even or below 3; with
+     *     modulus, for a public exponent that is even, below 3, or not less
+     *     than the modulus, or for a prime of 1; with
      *     `InconsistentPrivateMembers` when the primes and CRT values are
      *     neither all present nor all absent, when one is present without
      *     `d`, or when `oth` is present without the primes; with
@@ -289,6 +293,7 @@ final readonly class RsaKey extends Jwk
     /**
      * Applies RFC 8017 section 3.1: the modulus is a product of odd primes,
      * so it is odd, and the public exponent is an odd integer of at least 3
+     * and less than the modulus
      *
      * A key with an exponent of 1 would pass the pair check of
      * `buildPrivateOpenSslKey()`, since signing with it is the identity, so
@@ -309,6 +314,19 @@ final readonly class RsaKey extends Jwk
                 'e',
             );
         }
+
+        // Both members are minimal, so the longer one is the larger, and two
+        // of one length compare as their bytes do.
+        if (
+            strlen($publicExponent) > strlen($modulus)
+            || (strlen($publicExponent) === strlen($modulus) && strcmp($publicExponent, $modulus) >= 0)
+        ) {
+            throw new InvalidJwk(
+                InvalidJwkReason::InvalidValue,
+                'The "e" member must be less than the "n" member',
+                'e',
+            );
+        }
     }
 
     /**
@@ -324,6 +342,16 @@ final readonly class RsaKey extends Jwk
 
         foreach ($privateMembers as $name => $value) {
             ByteInteger::checkRsaMember($name, $value);
+        }
+
+        foreach (['p', 'q'] as $name) {
+            if (($privateMembers[$name] ?? null) === "\x01") {
+                throw new InvalidJwk(
+                    InvalidJwkReason::InvalidValue,
+                    sprintf('The "%s" member must be a prime, and 1 is not a prime', $name),
+                    $name,
+                );
+            }
         }
 
         $crtCount = count($privateMembers) - ($this->privateExponent === null ? 0 : 1);
@@ -349,6 +377,46 @@ final readonly class RsaKey extends Jwk
                 InvalidJwkReason::InconsistentPrivateMembers,
                 'The "oth" member requires the "p" and "q" members',
                 'oth',
+            );
+        }
+    }
+
+    /**
+     * Checks that primes of these lengths can multiply to a number of the
+     * modulus's length, before the multiplication, whose work grows with
+     * the square of the lengths
+     *
+     * Every factor is minimal, so a product of factors whose lengths add up
+     * to `L` bytes is at most `L` bytes long and at least `L` minus one
+     * byte for each factor after the first.
+     *
+     * @param non-empty-list<string> $factors
+     *
+     * @throws InvalidJwk with `KeyPairMismatch`
+     */
+    private function checkPrimeLengths(#[SensitiveParameter] array $factors): void
+    {
+        $length = 0;
+
+        foreach ($factors as $factor) {
+            $length += strlen($factor);
+        }
+
+        $modulusLength = strlen($this->modulus);
+
+        if ($modulusLength > $length) {
+            throw new InvalidJwk(
+                InvalidJwkReason::KeyPairMismatch,
+                'The prime factors are too short to multiply to the "n" member',
+                'p',
+            );
+        }
+
+        if ($modulusLength < $length - count($factors) + 1) {
+            throw new InvalidJwk(
+                InvalidJwkReason::KeyPairMismatch,
+                'The prime factors are too long to multiply to the "n" member',
+                'p',
             );
         }
     }
@@ -429,6 +497,8 @@ final readonly class RsaKey extends Jwk
                 $this->otherPrimesInfo,
             ),
         ];
+
+        $this->checkPrimeLengths($factors);
 
         if (ByteInteger::product($factors) !== $this->modulus) {
             throw new InvalidJwk(

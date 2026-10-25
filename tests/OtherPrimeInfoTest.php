@@ -52,4 +52,16 @@ class OtherPrimeInfoTest extends TestCase
             $this->assertSame('t', $exception->member);
         }
     }
+
+    public function testRefusesAPrimeFactorOfOne(): void
+    {
+        try {
+            new OtherPrimeInfo("\x01", "\x03", "\x04");
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
+            $this->assertSame('r', $exception->member);
+            $this->assertSame('The "r" member must be a prime, and 1 is not a prime', $exception->getMessage());
+        }
+    }
 }

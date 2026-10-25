@@ -26,6 +26,7 @@ namespace SocialWeb\Jwk;
 use JsonSerializable;
 use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidJwk;
+use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 /**
  * One entry of the `oth` member of an RSA private key, per RFC 7518
@@ -38,7 +39,8 @@ final readonly class OtherPrimeInfo implements JsonSerializable
      * @param string $factorCrtExponent The `d` member
      * @param string $factorCrtCoefficient The `t` member
      *
-     * @throws InvalidJwk when a member is empty, zero, or not minimal
+     * @throws InvalidJwk when a member is empty, zero, or not minimal, or
+     *     when the prime factor is 1
      */
     public function __construct(
         #[SensitiveParameter]
@@ -51,6 +53,14 @@ final readonly class OtherPrimeInfo implements JsonSerializable
         ByteInteger::checkRsaMember('r', $primeFactor);
         ByteInteger::checkRsaMember('d', $factorCrtExponent);
         ByteInteger::checkRsaMember('t', $factorCrtCoefficient);
+
+        if ($primeFactor === "\x01") {
+            throw new InvalidJwk(
+                InvalidJwkReason::InvalidValue,
+                'The "r" member must be a prime, and 1 is not a prime',
+                'r',
+            );
+        }
     }
 
     /**

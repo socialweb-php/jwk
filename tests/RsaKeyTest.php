@@ -20,6 +20,7 @@ use function openssl_pkey_get_details;
 use function openssl_pkey_get_public;
 use function openssl_verify;
 use function print_r;
+use function str_repeat;
 use function strlen;
 use function substr;
 
@@ -341,6 +342,118 @@ class RsaKeyTest extends TestCase
             'r',
         ];
         yield 'a zero private exponent' => [[...$a2, 'd' => 'AA'], InvalidJwkReason::InvalidValue, 'd'];
+        yield 'a public exponent equal to the modulus' => [
+            ['kty' => 'RSA', 'n' => $a2['n'], 'e' => $a2['n']],
+            InvalidJwkReason::InvalidValue,
+            'e',
+        ];
+        $longExponent = Base64Url::encode("\x01" . Base64Url::decode(self::fixtureString($a2, 'n')));
+        yield 'a public exponent longer than the modulus' => [
+            ['kty' => 'RSA', 'n' => $a2['n'], 'e' => $longExponent],
+            InvalidJwkReason::InvalidValue,
+            'e',
+        ];
+        yield 'a first prime of one' => [[...$a2, 'p' => 'AQ'], InvalidJwkReason::InvalidValue, 'p'];
+        yield 'a second prime of one' => [[...$a2, 'q' => 'AQ'], InvalidJwkReason::InvalidValue, 'q'];
+        yield 'an oth prime of one' => [
+            [...$threePrimes, 'oth' => [['r' => 'AQ', 'd' => 'AQ', 't' => 'AQ']]],
+            InvalidJwkReason::InvalidValue,
+            'r',
+        ];
+    }
+
+    public function testAcceptsAPublicExponentBelowTheModulus(): void
+    {
+        $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $modulus = Base64Url::decode(self::fixtureString($a2, 'n'));
+        // The modulus ends in the byte 0x83, so ending it in 0x81 instead
+        // gives an odd exponent of the same length, just below it.
+        $belowModulus = substr($modulus, 0, -1) . "\x81";
+
+        $sameLength = Jwk::fromJson(['kty' => 'RSA', 'n' => $a2['n'], 'e' => Base64Url::encode($belowModulus)]);
+        $this->assertInstanceOf(RsaKey::class, $sameLength);
+        $this->assertSame($belowModulus, $sameLength->publicExponent);
+
+        $shorterWithAHigherFirstByte = Jwk::fromJson(['kty' => 'RSA', 'n' => $a2['n'], 'e' => '____']);
+        $this->assertInstanceOf(RsaKey::class, $shorterWithAHigherFirstByte);
+        $this->assertSame("\xff\xff\xff", $shorterWithAHigherFirstByte->publicExponent);
+    }
+
+    public function testTheRangeMessagesNameTheRule(): void
+    {
+        $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+
+        try {
+            Jwk::fromJson(['kty' => 'RSA', 'n' => $a2['n'], 'e' => $a2['n']]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame('The "e" member must be less than the "n" member', $exception->getMessage());
+        }
+
+        try {
+            Jwk::fromJson([...$a2, 'q' => 'AQ']);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame('The "q" member must be a prime, and 1 is not a prime', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{int, int, string}>
+     */
+    public static function primeLengthProvider(): iterable
+    {
+        $tooLong = 'The prime factors are too long to multiply to the "n" member';
+        $tooShort = 'The prime factors are too short to multiply to the "n" member';
+        $mismatch = 'The prime factors do not multiply to the "n" member';
+
+        yield 'primes far too long for the modulus' => [512, 512, $tooLong];
+        yield 'primes far too short for the modulus' => [1, 1, $tooShort];
+        yield 'primes one byte too short in all' => [128, 127, $tooShort];
+        yield 'primes one byte too long in all' => [129, 129, $tooLong];
+        yield 'primes whose product could have the length of the modulus' => [129, 128, $mismatch];
+    }
+
+    /**
+     * The modulus of the RFC 7517 appendix A.2 key is 256 bytes long, and
+     * the product of two minimal factors of 129 and 128 bytes is 256 or 257
+     * bytes long
+     */
+    #[DataProvider('primeLengthProvider')]
+    public function testRefusesPrimesWhoseLengthsCannotGiveTheModulus(
+        int $firstLength,
+        int $secondLength,
+        string $message,
+    ): void {
+        $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+
+        try {
+            Jwk::fromJson([
+                ...$a2,
+                'p' => Base64Url::encode(str_repeat("\x03", $firstLength)),
+                'q' => Base64Url::encode(str_repeat("\x03", $secondLength)),
+            ]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::KeyPairMismatch, $exception->reason);
+            $this->assertSame('p', $exception->member);
+            $this->assertSame($message, $exception->getMessage());
+        }
+    }
+
+    public function testRefusesAThirdPrimeThatMakesTheProductTooLong(): void
+    {
+        $threePrimes = self::fixture('generated/rsa-three-primes.json');
+
+        try {
+            $longPrime = Base64Url::encode(str_repeat("\x03", 87));
+            Jwk::fromJson([...$threePrimes, 'oth' => [['r' => $longPrime, 'd' => 'AQ', 't' => 'AQ']]]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::KeyPairMismatch, $exception->reason);
+            $this->assertSame('p', $exception->member);
+            $this->assertSame('The prime factors are too long to multiply to the "n" member', $exception->getMessage());
+        }
     }
 
     /**
