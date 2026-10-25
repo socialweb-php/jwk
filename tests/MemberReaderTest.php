@@ -9,7 +9,9 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\MemberReader;
+use stdClass;
 
+use function json_encode;
 use function sprintf;
 use function str_contains;
 use function str_repeat;
@@ -37,7 +39,6 @@ class MemberReaderTest extends TestCase
     public function testAnEmptyObjectHasNoMembers(): void
     {
         $this->assertFalse(MemberReader::fromJson('{}')->has('kty'));
-        $this->assertFalse(MemberReader::fromJson([])->has('kty'));
     }
 
     public function testKeepsTheLexicallyLastOfTwoMembersWithOneName(): void
@@ -105,6 +106,7 @@ class MemberReaderTest extends TestCase
         yield 'a JSON number' => ['42'];
         yield 'JSON null' => ['null'];
         yield 'a PHP list' => [['kty', 'oct']];
+        yield 'an empty PHP array' => [[]];
     }
 
     /**
@@ -270,7 +272,7 @@ class MemberReaderTest extends TestCase
     {
         $reader = MemberReader::fromJson('{"kty":"oct","ext":true,"k":"AQAB","nested":{"a":[1,2]}}');
 
-        $this->assertSame(['ext' => true, 'nested' => ['a' => [1, 2]]], $reader->except(['kty', 'k']));
+        $this->assertEquals(['ext' => true, 'nested' => (object) ['a' => [1, 2]]], $reader->except(['kty', 'k']));
         $this->assertSame([], $reader->except(['kty', 'ext', 'k', 'nested']));
     }
 
@@ -337,6 +339,54 @@ class MemberReaderTest extends TestCase
 
         $this->assertSame([], $reader->stringList('key_ops'));
         $this->assertCount(1, $reader->objectList('oth'));
-        $this->assertSame(['nested' => ['a' => [], 'b' => []]], $reader->except(['key_ops', 'oth']));
+        $this->assertEquals(
+            ['nested' => (object) ['a' => new stdClass(), 'b' => []]],
+            $reader->except(['key_ops', 'oth']),
+        );
+        $this->assertSame('{"nested":{"a":{},"b":[]}}', json_encode($reader->except(['key_ops', 'oth'])));
+    }
+
+    public function testReadsAPhpListAsAJsonArrayAndAnyOtherPhpArrayAsAJsonObject(): void
+    {
+        $reader = MemberReader::fromJson([
+            'kty' => 'oct',
+            'list' => ['a', 'b'],
+            'empty' => [],
+            'keyed' => ['a' => 1],
+            'unordered' => [1 => 'b', 0 => 'a'],
+            'deep' => [['a' => []]],
+        ]);
+
+        $this->assertSame(
+            '{"list":["a","b"],"empty":[],"keyed":{"a":1},"unordered":{"1":"b","0":"a"},"deep":[{"a":[]}]}',
+            json_encode($reader->except(['kty'])),
+        );
+        $this->assertInstanceOf(stdClass::class, $reader->except(['kty'])['keyed']);
+    }
+
+    public function testAPhpListIsNotAnEntryOfAnObjectList(): void
+    {
+        $this->assertSame("\x01", MemberReader::fromJson(['oth' => [['r' => 'AQ']]])->objectList('oth')[0]->bytes('r'));
+
+        foreach ([[[]], [['AQ']]] as $oth) {
+            try {
+                MemberReader::fromJson(['oth' => $oth])->objectList('oth');
+                $this->fail('Expected InvalidJwk');
+            } catch (InvalidJwk $exception) {
+                $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+                $this->assertSame('oth', $exception->member);
+            }
+        }
+    }
+
+    public function testAPhpArrayThatIsNotAListIsNotAStringList(): void
+    {
+        try {
+            MemberReader::fromJson(['key_ops' => [1 => 'sign']])->stringList('key_ops');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame('The "key_ops" member must be an array', $exception->getMessage());
+        }
     }
 }

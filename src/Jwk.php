@@ -32,7 +32,6 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 use function array_is_list;
-use function array_keys;
 use function array_unique;
 use function count;
 use function hash;
@@ -65,6 +64,15 @@ abstract readonly class Jwk implements JsonSerializable
     private const array COMMON_MEMBER_NAMES = ['kty', 'use', 'key_ops', 'alg', 'kid', 'x5u', 'x5c', 'x5t', 'x5t#S256'];
 
     /**
+     * Every member the package does not define, in the order received,
+     * with each JSON object in a value as a `stdClass` and each JSON array
+     * as a PHP list, as `json_decode()` gives them by default
+     *
+     * @var array<string, mixed>
+     */
+    public array $additionalMembers;
+
+    /**
      * @param ?string $keyId The `kid` member
      * @param ?string $algorithm The `alg` member, kept as a string because
      *     the registry is open
@@ -78,7 +86,9 @@ abstract readonly class Jwk implements JsonSerializable
      * @param ?string $certificateSha1Thumbprint The `x5t` member
      * @param ?string $certificateSha256Thumbprint The `x5t#S256` member
      * @param array<string, mixed> $additionalMembers Every member the
-     *     package does not define, as decoded JSON
+     *     package does not define, as decoded JSON; a JSON object is a
+     *     `stdClass` or a PHP array that is not a list, and a JSON array is
+     *     a PHP list
      *
      * @throws InvalidArgument when an additional member is named after a member
      *     the key type defines
@@ -92,8 +102,18 @@ abstract readonly class Jwk implements JsonSerializable
         public array $certificateChain,
         public ?string $certificateSha1Thumbprint,
         public ?string $certificateSha256Thumbprint,
-        public array $additionalMembers,
+        array $additionalMembers,
     ) {
+        $members = [];
+
+        /** @var mixed $value */
+        foreach ($additionalMembers as $name => $value) {
+            $name = (string) $name;
+            $this->checkAdditionalMemberName($name);
+            $members[$name] = JsonValue::read($name, $value);
+        }
+
+        $this->additionalMembers = $members;
         $this->checkCommonMembers();
     }
 
@@ -301,6 +321,12 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * Returns the key with an additional member added or replaced
      *
+     * The value is kept as `json_decode()` gives a JSON value by default: a
+     * JSON object as a `stdClass` and a JSON array as a PHP list. A PHP
+     * array that is a list, including an empty array, is a JSON array, and
+     * any other PHP array is a JSON object, which the key keeps as a
+     * `stdClass`.
+     *
      * @throws InvalidArgument when the name is one the package defines for
      *     this key, which the typed members hold instead
      */
@@ -309,7 +335,7 @@ abstract readonly class Jwk implements JsonSerializable
         $this->checkAdditionalMemberName($name);
 
         $members = $this->additionalMembers;
-        $members[$name] = $value;
+        $members[$name] = JsonValue::read($name, $value);
 
         return clone($this, ['additionalMembers' => $members]);
     }
@@ -514,10 +540,6 @@ abstract readonly class Jwk implements JsonSerializable
      */
     private function checkCommonMembers(): void
     {
-        foreach (array_keys($this->additionalMembers) as $name) {
-            $this->checkAdditionalMemberName((string) $name);
-        }
-
         if (!array_is_list($this->certificateChain)) {
             throw self::notAStringList('x5c');
         }

@@ -46,7 +46,7 @@ use const JSON_THROW_ON_ERROR;
  * each the way RFC 7517 does
  *
  * The reader knows nothing of key types. It turns JSON text or a decoded
- * array into named members, checks that each member asked for has the
+ * value into named members, checks that each member asked for has the
  * JSON type the caller expects, and decodes the byte-string members from
  * base64url. The key classes decide which members are required and what
  * their values must be.
@@ -56,14 +56,11 @@ use const JSON_THROW_ON_ERROR;
 final class MemberReader
 {
     /**
-     * @param array<array-key, mixed> $members
-     * @param bool $fromText Whether JSON text was decoded, so that an array
-     *     in the members is a JSON array and never a JSON object
+     * @param array<array-key, mixed> $members Every value as `JsonValue`
+     *     reads it
      */
-    private function __construct(
-        #[SensitiveParameter] private readonly array $members,
-        private readonly bool $fromText,
-    ) {
+    private function __construct(#[SensitiveParameter] private readonly array $members)
+    {
     }
 
     /**
@@ -73,11 +70,11 @@ final class MemberReader
      * PHP's parser keeps the lexically last of two members with one name,
      * which is one of the two behaviors RFC 7517 section 4 allows.
      *
-     * JSON text is decoded with each object as a `stdClass` and each array
-     * as a PHP array, so `{}` and `[]` are different values. In an array
-     * that was already decoded, both are an empty PHP array, so an empty
-     * array is read as an empty object, an empty list, or an empty list of
-     * objects, whichever the caller asks for.
+     * The members are kept as `json_decode()` gives them by default: each
+     * JSON object as a `stdClass` and each JSON array as a PHP list, so
+     * `{}` and `[]` are different values. In a decoded array, a PHP array
+     * that is a list, including an empty array, is a JSON array, and any
+     * other PHP array is a JSON object.
      *
      * @param string | array<array-key, mixed> $json
      *
@@ -86,8 +83,6 @@ final class MemberReader
      */
     public static function fromJson(#[SensitiveParameter] string | array $json): self
     {
-        $fromText = is_string($json);
-
         if (is_string($json)) {
             try {
                 /** @var mixed $json */
@@ -100,18 +95,11 @@ final class MemberReader
             }
         }
 
-        if (!self::isObject($json, $fromText)) {
+        if (!$json instanceof stdClass && (!is_array($json) || array_is_list($json))) {
             throw new InvalidJwk(InvalidJwkReason::NotAnObject, 'The JSON value is not an object');
         }
 
-        $members = [];
-
-        /** @var mixed $value */
-        foreach ($json instanceof stdClass ? get_object_vars($json) : $json as $name => $value) {
-            $members[(string) $name] = $value;
-        }
-
-        return new self($members, $fromText);
+        return new self(JsonValue::readMembers($json));
     }
 
     /**
@@ -221,7 +209,7 @@ final class MemberReader
 
         $value = $this->members[$name];
 
-        if (!is_array($value) || !array_is_list($value)) {
+        if (!is_array($value)) {
             throw new InvalidJwk(
                 InvalidJwkReason::WrongType,
                 sprintf('The "%s" member must be an array', $name),
@@ -264,7 +252,7 @@ final class MemberReader
 
         $value = $this->members[$name];
 
-        if (!is_array($value) || !array_is_list($value)) {
+        if (!is_array($value)) {
             throw new InvalidJwk(
                 InvalidJwkReason::WrongType,
                 sprintf('The "%s" member must be an array', $name),
@@ -276,7 +264,7 @@ final class MemberReader
 
         /** @var mixed $entry */
         foreach ($value as $entry) {
-            if (!self::isObject($entry, $this->fromText)) {
+            if (!$entry instanceof stdClass) {
                 throw new InvalidJwk(
                     InvalidJwkReason::WrongType,
                     sprintf('Every entry of the "%s" member must be an object', $name),
@@ -284,7 +272,7 @@ final class MemberReader
                 );
             }
 
-            $readers[] = new self($entry instanceof stdClass ? get_object_vars($entry) : $entry, $this->fromText);
+            $readers[] = new self(get_object_vars($entry));
         }
 
         return $readers;
@@ -292,7 +280,8 @@ final class MemberReader
 
     /**
      * Returns every member whose name is not in the list, in the order
-     * received
+     * received, with each JSON object in it as a `stdClass` and each JSON
+     * array as a PHP list
      *
      * @param list<string> $names
      *
@@ -307,49 +296,10 @@ final class MemberReader
             $name = (string) $name;
 
             if (!in_array($name, $names, true)) {
-                $remaining[$name] = self::toArray($value);
+                $remaining[$name] = $value;
             }
         }
 
         return $remaining;
-    }
-
-    /**
-     * Returns whether the value is a JSON object, or, when the value was not
-     * decoded from text, an array that a decoded JSON object could be: an
-     * empty array or one whose keys are not a list
-     *
-     * @phpstan-assert-if-true array<array-key, mixed> | stdClass $value
-     */
-    private static function isObject(#[SensitiveParameter] mixed $value, bool $fromText): bool
-    {
-        if ($value instanceof stdClass) {
-            return true;
-        }
-
-        return !$fromText && is_array($value) && ($value === [] || !array_is_list($value));
-    }
-
-    /**
-     * Returns the value with every JSON object in it as an associative array
-     */
-    private static function toArray(mixed $value): mixed
-    {
-        if ($value instanceof stdClass) {
-            $value = get_object_vars($value);
-        }
-
-        if (!is_array($value)) {
-            return $value;
-        }
-
-        $converted = [];
-
-        /** @var mixed $entry */
-        foreach ($value as $name => $entry) {
-            $converted[$name] = self::toArray($entry);
-        }
-
-        return $converted;
     }
 }

@@ -43,7 +43,9 @@ final readonly class OctKey extends Jwk
      * @param string $keyValue The key bytes, the `k` member
      * @param list<KeyOperation | string> $keyOperations
      * @param list<string> $certificateChain
-     * @param array<string, mixed> $additionalMembers
+     * @param array<string, mixed> $additionalMembers Every member the
+     *     package does not define; a JSON object is a `stdClass` or a PHP
+     *     array that is not a list, and a JSON array is a PHP list
      *
      * @throws InvalidJwk with `InvalidValue` for an empty key, or as the
      *     common members' rules say

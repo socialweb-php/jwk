@@ -22,6 +22,7 @@ use SocialWeb\Jwk\OctKey;
 use SocialWeb\Jwk\OkpKey;
 use SocialWeb\Jwk\RsaKey;
 use Throwable;
+use stdClass;
 
 use function array_keys;
 use function hash;
@@ -38,6 +39,7 @@ use function str_repeat;
 use function strlen;
 use function unserialize;
 
+use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 
 class JwkTest extends TestCase
@@ -287,7 +289,39 @@ class JwkTest extends TestCase
         $this->assertSame(['MIID'], $key->certificateChain);
         $this->assertSame('AQAB', $key->certificateSha1Thumbprint);
         $this->assertSame('AQAB', $key->certificateSha256Thumbprint);
-        $this->assertSame(['ext' => true, 'nested' => ['a' => [1, 2, 3]]], $key->additionalMembers);
+        $this->assertEquals(['ext' => true, 'nested' => (object) ['a' => [1, 2, 3]]], $key->additionalMembers);
+        $this->assertInstanceOf(stdClass::class, $key->additionalMembers['nested']);
+    }
+
+    public function testWritesJsonObjectsInAdditionalMembersBackAsObjects(): void
+    {
+        $json = '{"kty":"oct","k":"AQAB","empty":{},"numbered":{"0":"a","1":"b"},"nested":{"a":{},"b":[]}}';
+
+        $this->assertSame($json, Jwk::fromJson($json)->toJson());
+    }
+
+    public function testKeepsAnAdditionalMemberAsAJsonValue(): void
+    {
+        $key = new OctKey("\x01");
+        $object = new stdClass();
+        $object->a = [1.0, ['b' => []]];
+        $changed = $key->withAdditionalMember('object', $object)
+            ->withAdditionalMember('list', ['a', 'b'])
+            ->withAdditionalMember('empty', [])
+            ->withAdditionalMember('keyed', ['0' => 'a', '2' => 'b'])
+            ->withAdditionalMember('scalar', 1.0);
+        $object->a = 'changed';
+
+        $this->assertSame(
+            '{"kty":"oct","k":"AQ","object":{"a":[1.0,{"b":[]}]},"list":["a","b"],"empty":[],'
+            . '"keyed":{"0":"a","2":"b"},"scalar":1.0}',
+            json_encode($changed, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR),
+        );
+        $this->assertNotSame($object, $changed->additionalMembers['object']);
+        $this->assertSame(
+            '{"kty":"oct","k":"AQ","nested":{"a":{}}}',
+            new OctKey("\x01", additionalMembers: ['nested' => ['a' => new stdClass()]])->toJson(),
+        );
     }
 
     public function testTheDeprecatedEdDsaNameIsStillAccepted(): void

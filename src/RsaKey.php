@@ -82,7 +82,9 @@ final readonly class RsaKey extends Jwk
      * @param list<OtherPrimeInfo> $otherPrimesInfo The `oth` member
      * @param list<KeyOperation | string> $keyOperations
      * @param list<string> $certificateChain
-     * @param array<string, mixed> $additionalMembers
+     * @param array<string, mixed> $additionalMembers Every member the
+     *     package does not define; a JSON object is a `stdClass` or a PHP
+     *     array that is not a list, and a JSON array is a PHP list
      *
      * @throws InvalidJwk with `NonMinimalInteger` or `InvalidValue` for a
      *     member that is not a Base64urlUInt of a positive value, for an even
