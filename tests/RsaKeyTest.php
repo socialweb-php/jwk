@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SocialWeb\Test\Jwk;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionClass;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\Exception\ConversionFailed;
 use SocialWeb\Jwk\Exception\ConversionFailedReason;
@@ -12,6 +13,7 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\Jwk;
 use SocialWeb\Jwk\KeyType;
+use SocialWeb\Jwk\OtherPrimeInfo;
 use SocialWeb\Jwk\RsaKey;
 
 use function array_keys;
@@ -360,6 +362,40 @@ class RsaKeyTest extends TestCase
             InvalidJwkReason::InvalidValue,
             'r',
         ];
+    }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed>}>
+     */
+    public static function wrongOtherPrimesProvider(): iterable
+    {
+        yield 'an entry that is not an OtherPrimeInfo' => [['AQ']];
+        yield 'entries that are not a list' => [[1 => new OtherPrimeInfo("\x03", "\x01", "\x01")]];
+    }
+
+    /**
+     * The argument goes through reflection, since its type is the one the
+     * parameter refuses
+     *
+     * @param array<array-key, mixed> $otherPrimesInfo
+     */
+    #[DataProvider('wrongOtherPrimesProvider')]
+    public function testTheConstructorChecksTheOtherPrimesAsParsingDoes(array $otherPrimesInfo): void
+    {
+        $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+
+        try {
+            new ReflectionClass(RsaKey::class)->newInstanceArgs([
+                'modulus' => Base64Url::decode(self::fixtureString($a2, 'n')),
+                'publicExponent' => "\x01\x00\x01",
+                'otherPrimesInfo' => $otherPrimesInfo,
+            ]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame('oth', $exception->member);
+            $this->assertSame('The "oth" member must be a list of OtherPrimeInfo objects', $exception->getMessage());
+        }
     }
 
     public function testAcceptsAPublicExponentBelowTheModulus(): void

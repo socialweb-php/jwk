@@ -31,11 +31,13 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
+use function array_is_list;
 use function array_keys;
 use function array_unique;
 use function count;
 use function hash;
 use function in_array;
+use function is_string;
 use function json_encode;
 use function sprintf;
 use function strlen;
@@ -469,16 +471,34 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * Returns the operations as the strings the member holds
      *
+     * The type of the list is checked here, before the list is rebuilt,
+     * so that a key built in code is refused as a parsed one is.
+     *
      * @param list<KeyOperation | string> $keyOperations
      *
      * @return list<string>
+     *
+     * @throws InvalidJwk with `WrongType` when the operations are not a
+     *     list of strings and `KeyOperation` cases
      */
     protected static function normalizeKeyOperations(array $keyOperations): array
     {
+        if (!array_is_list($keyOperations)) {
+            throw self::notAStringList('key_ops');
+        }
+
         $operations = [];
 
         foreach ($keyOperations as $operation) {
-            $operations[] = $operation instanceof KeyOperation ? $operation->value : $operation;
+            if ($operation instanceof KeyOperation) {
+                $operation = $operation->value;
+            }
+
+            if (!is_string($operation)) {
+                throw self::notAStringList('key_ops');
+            }
+
+            $operations[] = $operation;
         }
 
         return $operations;
@@ -496,6 +516,16 @@ abstract readonly class Jwk implements JsonSerializable
     {
         foreach (array_keys($this->additionalMembers) as $name) {
             $this->checkAdditionalMemberName((string) $name);
+        }
+
+        if (!array_is_list($this->certificateChain)) {
+            throw self::notAStringList('x5c');
+        }
+
+        foreach ($this->certificateChain as $certificate) {
+            if (!is_string($certificate)) {
+                throw self::notAStringList('x5c');
+            }
         }
 
         if ($this->keyId === '') {
@@ -606,6 +636,15 @@ abstract readonly class Jwk implements JsonSerializable
         return $curve === null
             ? sprintf('an %s key', $this->keyType()->value)
             : sprintf('an %s key on the curve %s', $this->keyType()->value, $curve->value);
+    }
+
+    private static function notAStringList(string $member): InvalidJwk
+    {
+        return new InvalidJwk(
+            InvalidJwkReason::WrongType,
+            sprintf('The "%s" member must be a list of strings', $member),
+            $member,
+        );
     }
 
     /**

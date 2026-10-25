@@ -6,6 +6,8 @@ namespace SocialWeb\Test\Jwk;
 
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionClass;
+use ReflectionMethod;
 use SensitiveParameterValue;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\EcKey;
@@ -512,6 +514,62 @@ class JwkTest extends TestCase
         );
 
         unserialize($crafted);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function wrongListArgumentProvider(): iterable
+    {
+        yield 'a key operation that is not a string' => [['keyOperations' => [1]], 'key_ops'];
+        yield 'key operations that are not a list' => [['keyOperations' => ['a' => 'sign']], 'key_ops'];
+        yield 'a certificate that is not a string' => [['certificateChain' => [1]], 'x5c'];
+        yield 'certificates that are not a list' => [['certificateChain' => ['a' => 'MIIB']], 'x5c'];
+    }
+
+    /**
+     * The arguments go through reflection, since their types are the ones
+     * the parameters refuse
+     *
+     * @param array<string, mixed> $arguments
+     */
+    #[DataProvider('wrongListArgumentProvider')]
+    public function testAConstructorChecksItsListArgumentsAsParsingDoes(array $arguments, string $member): void
+    {
+        try {
+            new ReflectionClass(OctKey::class)->newInstanceArgs(['keyValue' => "\x01", ...$arguments]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame($member, $exception->member);
+            $this->assertSame(sprintf('The "%s" member must be a list of strings', $member), $exception->getMessage());
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    #[DataProvider('wrongListArgumentProvider')]
+    public function testTheWithMethodsCheckTheirListArgumentsAsParsingDoes(array $arguments, string $member): void
+    {
+        $key = new OctKey("\x01");
+        $method = $member === 'key_ops' ? 'withKeyOperations' : 'withCertificateChain';
+
+        try {
+            new ReflectionMethod($key, $method)->invoke($key, ...$arguments);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame($member, $exception->member);
+        }
+    }
+
+    public function testAConstructorAcceptsKeyOperationCasesAndStrings(): void
+    {
+        $key = new OctKey("\x01", keyOperations: [KeyOperation::Sign, 'verify'], certificateChain: ['MIIB']);
+
+        $this->assertSame(['sign', 'verify'], $key->keyOperations);
+        $this->assertSame(['MIIB'], $key->certificateChain);
     }
 
     public function testKeepsPrivateKeyMaterialOutOfExceptionTraces(): void

@@ -31,6 +31,7 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 use function array_filter;
+use function array_is_list;
 use function array_keys;
 use function array_map;
 use function count;
@@ -88,7 +89,8 @@ final readonly class RsaKey extends Jwk
      *     than the modulus, or for a prime of 1; with
      *     `InconsistentPrivateMembers` when the primes and CRT values are
      *     neither all present nor all absent, when one is present without
-     *     `d`, or when `oth` is present without the primes; with
+     *     `d`, or when `oth` is present without the primes; with `WrongType`
+     *     when the other primes are not a list of `OtherPrimeInfo`; with
      *     `KeyPairMismatch` when the private members do not belong to the
      *     public ones; or as the common members' rules say
      */
@@ -330,14 +332,24 @@ final readonly class RsaKey extends Jwk
     }
 
     /**
-     * Applies RFC 7518 section 6.3.2: `d` is required of a private key, the
-     * five optimization members come all together or not at all, and `oth`
-     * needs the primes
+     * Applies RFC 7518 section 6.3.2: `oth` is a list of entries, `d` is
+     * required of a private key, the five optimization members come all
+     * together or not at all, and `oth` needs the primes
      *
      * @throws InvalidJwk
      */
     private function checkPrivateMembers(): void
     {
+        if (!array_is_list($this->otherPrimesInfo)) {
+            throw self::notAnOtherPrimesList();
+        }
+
+        foreach ($this->otherPrimesInfo as $info) {
+            if (!$info instanceof OtherPrimeInfo) {
+                throw self::notAnOtherPrimesList();
+            }
+        }
+
         $privateMembers = $this->privateMembers();
 
         foreach ($privateMembers as $name => $value) {
@@ -419,6 +431,15 @@ final readonly class RsaKey extends Jwk
                 'p',
             );
         }
+    }
+
+    private static function notAnOtherPrimesList(): InvalidJwk
+    {
+        return new InvalidJwk(
+            InvalidJwkReason::WrongType,
+            'The "oth" member must be a list of OtherPrimeInfo objects',
+            'oth',
+        );
     }
 
     /**
