@@ -192,7 +192,7 @@ class OctKeyTest extends TestCase
     public function testRefusesAnAdditionalMemberNamedForADefinedMember(string $name): void
     {
         $this->expectException(InvalidArgument::class);
-        $this->expectExceptionMessage(
+        $this->expectExceptionMessageIsOrContains(
             sprintf('The "%s" member is defined for this key type and is not an additional member', $name),
         );
 

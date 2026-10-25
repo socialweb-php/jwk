@@ -76,6 +76,9 @@ abstract readonly class Jwk implements JsonSerializable
      * @param ?string $certificateSha256Thumbprint The `x5t#S256` member
      * @param array<string, mixed> $additionalMembers Every member the
      *     package does not define, as decoded JSON
+     *
+     * @throws InvalidArgument when an additional member is named after a member
+     *     the key type defines
      */
     protected function __construct(
         public ?string $keyId,
@@ -468,6 +471,8 @@ abstract readonly class Jwk implements JsonSerializable
      * members, as parsing and the `with` methods both do
      *
      * @throws InvalidJwk
+     * @throws InvalidArgument when an additional member is named after a member
+     *     the key type defines
      */
     private function checkCommonMembers(): void
     {
