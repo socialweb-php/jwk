@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use function base64_encode;
+use function chr;
 use function chunk_split;
 use function ltrim;
 use function ord;
@@ -115,7 +116,14 @@ final class RsaPublicKeyInfo
             return pack('C', $length);
         }
 
-        $bytes = ltrim(pack('J', $length), "\0");
+        // The bytes are taken one at a time, since pack() has no format for a
+        // 64-bit integer on a 32-bit build of PHP.
+        $bytes = '';
+
+        do {
+            $bytes = chr($length & 0xff) . $bytes;
+            $length >>= 8;
+        } while ($length > 0);
 
         return pack('C', 0x80 | strlen($bytes)) . $bytes;
     }
