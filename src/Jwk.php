@@ -107,7 +107,7 @@ abstract readonly class Jwk implements JsonSerializable
      * @throws InvalidJwk when the input is not a well-formed JWK of a type
      *     the package implements; the reason says which rule it broke
      */
-    public static function fromJson(string | array $json, bool $publicOnly = false): RsaKey | EcKey | OctKey
+    public static function fromJson(string | array $json, bool $publicOnly = false): RsaKey | EcKey | OkpKey | OctKey
     {
         $members = MemberReader::fromJson($json);
         $kty = $members->requiredString('kty');
@@ -124,12 +124,8 @@ abstract readonly class Jwk implements JsonSerializable
         return match ($keyType) {
             KeyType::Rsa => RsaKey::fromMembers($members),
             KeyType::Ec => EcKey::fromMembers($members),
+            KeyType::Okp => OkpKey::fromMembers($members),
             KeyType::Oct => OctKey::fromMembers($members),
-            KeyType::Okp => throw new InvalidJwk(
-                InvalidJwkReason::UnsupportedKeyType,
-                sprintf('The key type "%s" is not implemented yet', $kty),
-                'kty',
-            ),
         };
     }
 
