@@ -61,11 +61,11 @@ final readonly class EcKey extends Jwk
      *     array that is not a list, and a JSON array is a PHP list
      *
      * @throws InvalidJwk with `UnsupportedCurve` for an `OKP` curve; with
-     *     `WrongLength` for a coordinate or private key of another length
-     *     than the curve fixes; with `InvalidValue` for a `d` that is zero
-     *     or not less than the curve's order; with `PointNotOnCurve` when `x` and `y` are
-     *     not a point on the curve; with `KeyPairMismatch` when `d` does not
-     *     derive the point; or as the common members' rules say
+     *     `WrongLength` for a coordinate or private key of another length than
+     *     the curve fixes; with `InvalidValue` for a `d` that is zero or not
+     *     less than the curve's order; with `PointNotOnCurve` when `x` and `y`
+     *     are not a point on the curve; with `KeyPairMismatch` when `d` does
+     *     not derive the point; or as the common members' rules say
      * @throws InvalidArgument when an additional member is named after a member
      *     the key type defines
      */
