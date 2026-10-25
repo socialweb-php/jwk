@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace SocialWeb\Test\Jwk;
 
+use Closure;
+use DateTimeImmutable;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
@@ -39,8 +41,10 @@ use function str_repeat;
 use function strlen;
 use function unserialize;
 
+use const INF;
 use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
+use const NAN;
 
 class JwkTest extends TestCase
 {
@@ -659,6 +663,103 @@ class JwkTest extends TestCase
         $this->assertSame(['MIIB'], $key->certificateChain);
     }
 
+    /**
+     * @return iterable<string, array{Closure(OctKey): OctKey, string}>
+     */
+    public static function notUtf8CommonMemberProvider(): iterable
+    {
+        yield 'kid' => [static fn (OctKey $key): OctKey => $key->withKeyId("\xff"), 'kid'];
+        yield 'alg' => [static fn (OctKey $key): OctKey => $key->withAlgorithm("HS\xff"), 'alg'];
+        yield 'use' => [static fn (OctKey $key): OctKey => $key->withUse("\xff"), 'use'];
+        yield 'key_ops' => [static fn (OctKey $key): OctKey => $key->withKeyOperations(['sign', "\xff"]), 'key_ops'];
+        yield 'x5u' => [static fn (OctKey $key): OctKey => $key->withCertificateUrl("\xff"), 'x5u'];
+        yield 'x5c' => [static fn (OctKey $key): OctKey => $key->withCertificateChain(['MIIB', "\xff"]), 'x5c'];
+        yield 'x5t' => [static fn (OctKey $key): OctKey => $key->withCertificateSha1Thumbprint("\xff"), 'x5t'];
+        yield 'x5t#S256' => [
+            static fn (OctKey $key): OctKey => $key->withCertificateSha256Thumbprint("\xff"),
+            'x5t#S256',
+        ];
+    }
+
+    /**
+     * @param Closure(OctKey): OctKey $change
+     */
+    #[DataProvider('notUtf8CommonMemberProvider')]
+    public function testRefusesACommonMemberThatIsNotUtf8(Closure $change, string $member): void
+    {
+        try {
+            $change(new OctKey("\x01"));
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
+            $this->assertSame($member, $exception->member);
+            $this->assertSame(
+                sprintf('The "%s" member holds a string that is not valid UTF-8', $member),
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testRefusesAStringThatIsNotUtf8WhenBuildingAndParsing(): void
+    {
+        $attempts = [
+            'kid' => static fn (): OctKey => new OctKey("\x01", keyId: "\xff"),
+            'x5c' => static fn (): Jwk => Jwk::fromJson(['kty' => 'oct', 'k' => 'AQ', 'x5c' => ["\xff"]]),
+            'ext' => static fn (): OctKey => new OctKey("\x01", additionalMembers: ['ext' => ['a' => "\xff"]]),
+            'big' => static fn (): Jwk => Jwk::fromJson('{"kty":"oct","k":"AQAB","big":[1e999]}'),
+            'nan' => static fn (): OctKey => new OctKey("\x01", additionalMembers: ['nan' => [NAN]]),
+        ];
+
+        foreach ($attempts as $member => $attempt) {
+            try {
+                $attempt();
+                $this->fail('Expected InvalidJwk for ' . $member);
+            } catch (InvalidJwk $exception) {
+                $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason, $member);
+                $this->assertSame($member, $exception->member);
+            }
+        }
+    }
+
+    public function testRefusesAnAdditionalMemberThatJsonTextCannotHold(): void
+    {
+        $key = new OctKey("\x01");
+        $attempts = [
+            [
+                static fn (): OctKey => new OctKey("\x01", additionalMembers: ["\xff" => 1]),
+                InvalidJwkReason::MalformedJson,
+                null,
+            ],
+            [static fn (): OctKey => $key->withAdditionalMember("\0a", 1), InvalidJwkReason::MalformedJson, null],
+            [
+                static fn (): OctKey => $key->withAdditionalMember('x', ['a' => "\xff"]),
+                InvalidJwkReason::InvalidValue,
+                'x',
+            ],
+            [static fn (): OctKey => $key->withAdditionalMember('x', [INF]), InvalidJwkReason::InvalidValue, 'x'],
+            [
+                static fn (): OctKey => $key->withAdditionalMember('x', new DateTimeImmutable()),
+                InvalidJwkReason::WrongType,
+                'x',
+            ],
+            [
+                static fn (): OctKey => new OctKey("\x01", additionalMembers: ['x' => (object) ['y' => [$key]]]),
+                InvalidJwkReason::WrongType,
+                'x',
+            ],
+        ];
+
+        foreach ($attempts as $index => [$attempt, $reason, $member]) {
+            try {
+                $attempt();
+                $this->fail('Expected InvalidJwk for attempt ' . $index);
+            } catch (InvalidJwk $exception) {
+                $this->assertSame($reason, $exception->reason, (string) $index);
+                $this->assertSame($member, $exception->member, (string) $index);
+            }
+        }
+    }
+
     public function testKeepsPrivateKeyMaterialOutOfExceptionTraces(): void
     {
         $ec = self::fixtureSetMember('rfc7517/appendix-a2.json', 0);
@@ -721,6 +822,29 @@ class JwkTest extends TestCase
 
                     $this->assertSame([], $leaks, $label);
                 }
+            }
+
+            $key = Jwk::fromJson($ec);
+            $secrets = [self::fixtureString($ec, 'd'), Base64Url::decode(self::fixtureString($ec, 'd'))];
+
+            try {
+                $key->withKeyId("\xff");
+                $this->fail('Expected InvalidJwk for a key ID that is not UTF-8');
+            } catch (InvalidJwk $exception) {
+                $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
+                $this->assertSame('kid', $exception->member);
+
+                $leaks = [];
+
+                foreach (self::traceStrings($exception) as $string) {
+                    foreach ($secrets as $secret) {
+                        if (str_contains($string, $secret)) {
+                            $leaks[] = Base64Url::encode($secret);
+                        }
+                    }
+                }
+
+                $this->assertSame([], $leaks);
             }
         } finally {
             ini_set('zend.exception_ignore_args', $previous === false ? '1' : $previous);

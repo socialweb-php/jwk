@@ -79,9 +79,13 @@ final class MemberReader
      *
      * @param string | array<array-key, mixed> | stdClass $json
      *
-     * @throws InvalidJwk with `MalformedJson` when the text does not parse
-     *     or the value nests too deep, or with `NotAnObject` when the value
-     *     is not a JSON object
+     * @throws InvalidJwk with `MalformedJson` when the text does not parse,
+     *     the value nests too deep, or a member name starts with a NUL byte
+     *     or is not valid UTF-8; with `NotAnObject` when the value is not a
+     *     JSON object; with `InvalidValue` naming the member for a string
+     *     that is not valid UTF-8 or a number that is not finite; or with
+     *     `WrongType` naming the member for a value of a PHP type that is
+     *     not a JSON type
      */
     public static function fromJson(#[SensitiveParameter] string | array | stdClass $json): self
     {

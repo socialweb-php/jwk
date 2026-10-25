@@ -55,6 +55,11 @@ use const JSON_UNESCAPED_SLASHES;
  *
  * A key is immutable. The `with` methods return a new key with one member
  * changed, checked the way parsing checks it.
+ *
+ * Every string a key holds is valid UTF-8 and every number is finite, so
+ * that every key can be written as JSON text. A constructor or `with`
+ * method given a string that is not valid UTF-8 throws `InvalidJwk` with
+ * the reason `InvalidValue` naming the member.
  */
 abstract readonly class Jwk implements JsonSerializable
 {
@@ -234,6 +239,10 @@ abstract readonly class Jwk implements JsonSerializable
 
     /**
      * Returns the JWK as JSON text
+     *
+     * Every key the package accepts can be written: its strings are valid
+     * UTF-8, its numbers are finite, and its nesting is no deeper than
+     * `json_decode()` reads.
      */
     public function toJson(): string
     {
@@ -244,7 +253,7 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `kid` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `InvalidValue` for an empty string, which
-     *     RFC 7517 gives no meaning
+     *     RFC 7517 gives no meaning, or for a string that is not valid UTF-8
      */
     public function withKeyId(?string $keyId): static
     {
@@ -255,7 +264,8 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `alg` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `AlgorithmDoesNotFitKey` for a registered
-     *     algorithm the key cannot run
+     *     algorithm the key cannot run, or with `InvalidValue` for a string
+     *     that is not valid UTF-8
      */
     public function withAlgorithm(?string $algorithm): static
     {
@@ -266,7 +276,8 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `use` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `InconsistentUseAndKeyOperations` when the
-     *     use disagrees with the key's operations
+     *     use disagrees with the key's operations, or with `InvalidValue`
+     *     for a string that is not valid UTF-8
      */
     public function withUse(KeyUse | string | null $use): static
     {
@@ -280,8 +291,9 @@ abstract readonly class Jwk implements JsonSerializable
      * @param list<KeyOperation | string> $keyOperations
      *
      * @throws InvalidJwk with `DuplicateKeyOperation` for a repeated
-     *     operation, or with `InconsistentUseAndKeyOperations` when an
-     *     operation disagrees with the key's use
+     *     operation; with `InconsistentUseAndKeyOperations` when an
+     *     operation disagrees with the key's use; or with `InvalidValue`
+     *     for an operation that is not valid UTF-8
      */
     public function withKeyOperations(array $keyOperations): static
     {
@@ -290,6 +302,9 @@ abstract readonly class Jwk implements JsonSerializable
 
     /**
      * Returns the key with the `x5u` member replaced, or removed for `null`
+     *
+     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
+     *     UTF-8
      */
     public function withCertificateUrl(?string $certificateUrl): static
     {
@@ -301,6 +316,10 @@ abstract readonly class Jwk implements JsonSerializable
      * empty list
      *
      * @param list<string> $certificateChain
+     *
+     * @throws InvalidJwk with `WrongType` when the chain is not a list of
+     *     strings, or with `InvalidValue` for a string that is not valid
+     *     UTF-8
      */
     public function withCertificateChain(array $certificateChain): static
     {
@@ -309,6 +328,9 @@ abstract readonly class Jwk implements JsonSerializable
 
     /**
      * Returns the key with the `x5t` member replaced, or removed for `null`
+     *
+     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
+     *     UTF-8
      */
     public function withCertificateSha1Thumbprint(?string $thumbprint): static
     {
@@ -318,6 +340,9 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * Returns the key with the `x5t#S256` member replaced, or removed for
      * `null`
+     *
+     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
+     *     UTF-8
      */
     public function withCertificateSha256Thumbprint(?string $thumbprint): static
     {
@@ -335,6 +360,13 @@ abstract readonly class Jwk implements JsonSerializable
      *
      * @throws InvalidArgument when the name is one the package defines for
      *     this key, which the typed members hold instead
+     * @throws InvalidJwk when the name or the value is one JSON text cannot
+     *     hold, as `fromJson()` refuses it: with `MalformedJson` for a member
+     *     name that starts with a NUL byte or is not valid UTF-8, or for
+     *     nesting deeper than `json_decode()` reads; with `InvalidValue`
+     *     naming the member for a string that is not valid UTF-8 or a number
+     *     that is not finite; or with `WrongType` naming the member for a
+     *     value of a PHP type that is not a JSON type
      */
     public function withAdditionalMember(string $name, mixed $value): static
     {
@@ -556,6 +588,21 @@ abstract readonly class Jwk implements JsonSerializable
             }
         }
 
+        $strings = [
+            'use' => $this->use,
+            'key_ops' => $this->keyOperations,
+            'alg' => $this->algorithm,
+            'kid' => $this->keyId,
+            'x5u' => $this->certificateUrl,
+            'x5c' => $this->certificateChain,
+            'x5t' => $this->certificateSha1Thumbprint,
+            'x5t#S256' => $this->certificateSha256Thumbprint,
+        ];
+
+        foreach ($strings as $name => $value) {
+            JsonValue::check($name, $value);
+        }
+
         if ($this->keyId === '') {
             throw new InvalidJwk(InvalidJwkReason::InvalidValue, 'The "kid" member must not be empty', 'kid');
         }
@@ -594,9 +641,13 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * @throws InvalidArgument when the name is one the package defines for
      *     this key, which the typed members hold instead
+     * @throws InvalidJwk with `MalformedJson` for a name that JSON text
+     *     cannot hold
      */
     private function checkAdditionalMemberName(string $name): void
     {
+        JsonValue::checkName($name, null);
+
         if (in_array($name, $this->definedMemberNames(), true)) {
             throw new InvalidArgument(
                 sprintf('The "%s" member is defined for this key type and is not an additional member', $name),
