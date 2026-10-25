@@ -62,9 +62,16 @@ final class AlgorithmFit
      * Returns whether a key of the type, on the curve, can run the
      * algorithm, or whether the algorithm is one the registries do not
      * name and so is not checked
+     *
+     * A curve of another key type fits no algorithm, since no key of the
+     * type has that curve.
      */
     public static function fits(string $algorithm, KeyType $keyType, ?Curve $curve): bool
     {
+        if ($curve !== null && $curve->keyType() !== $keyType) {
+            return false;
+        }
+
         if (!self::isRegistered($algorithm)) {
             return true;
         }

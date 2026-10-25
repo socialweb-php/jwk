@@ -92,6 +92,15 @@ class AlgorithmFitTest extends TestCase
         $this->assertFalse(AlgorithmFit::fits('EdDSA', KeyType::Okp, null));
     }
 
+    public function testACurveOfAnotherKeyTypeFitsNoAlgorithm(): void
+    {
+        $this->assertFalse(AlgorithmFit::fits('EdDSA', KeyType::Ec, Curve::Ed25519));
+        $this->assertFalse(AlgorithmFit::fits('ES256', KeyType::Okp, Curve::P256));
+        $this->assertFalse(AlgorithmFit::fits('ES256', KeyType::Rsa, Curve::P256));
+        $this->assertFalse(AlgorithmFit::fits('unregistered', KeyType::Ec, Curve::X25519));
+        $this->assertTrue(AlgorithmFit::fits('EdDSA', KeyType::Okp, Curve::Ed25519));
+    }
+
     public function testTheNamesAreCaseSensitive(): void
     {
         $this->assertFalse(AlgorithmFit::isRegistered('rs256'));
