@@ -347,6 +347,17 @@ abstract readonly class Jwk implements JsonSerializable
     }
 
     /**
+     * Refuses PHP unserialization, which would build a key without checking
+     * its members; `fromJson()` is the way back from the JSON form
+     *
+     * @param array<array-key, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        throw new LogicException('A JWK cannot be unserialized with unserialize(); use Jwk::fromJson()');
+    }
+
+    /**
      * Returns the required members of the public form, in lexicographic
      * order, each as the string the hash input holds
      *

@@ -30,8 +30,11 @@ use function is_string;
 use function json_decode;
 use function json_encode;
 use function serialize;
+use function sprintf;
 use function str_contains;
 use function str_repeat;
+use function strlen;
+use function unserialize;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -497,6 +500,18 @@ class JwkTest extends TestCase
         $this->expectException(LogicException::class);
 
         serialize(new OctKey("\x01"));
+    }
+
+    public function testRefusesAKeyCraftedForPhpUnserialize(): void
+    {
+        $crafted = sprintf('O:%d:"%s":1:{s:8:"keyValue";s:0:"";}', strlen(OctKey::class), OctKey::class);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessageIsOrContains(
+            'A JWK cannot be unserialized with unserialize(); use Jwk::fromJson()',
+        );
+
+        unserialize($crafted);
     }
 
     public function testKeepsPrivateKeyMaterialOutOfExceptionTraces(): void

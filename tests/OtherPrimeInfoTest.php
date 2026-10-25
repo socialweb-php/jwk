@@ -4,9 +4,16 @@ declare(strict_types=1);
 
 namespace SocialWeb\Test\Jwk;
 
+use LogicException;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\OtherPrimeInfo;
+
+use function print_r;
+use function serialize;
+use function sprintf;
+use function strlen;
+use function unserialize;
 
 class OtherPrimeInfoTest extends TestCase
 {
@@ -63,5 +70,42 @@ class OtherPrimeInfoTest extends TestCase
             $this->assertSame('r', $exception->member);
             $this->assertSame('The "r" member must be a prime, and 1 is not a prime', $exception->getMessage());
         }
+    }
+
+    public function testRedactsEveryMemberWhenDumped(): void
+    {
+        $dump = print_r(new OtherPrimeInfo("\x01\x02", "\x03", "\x04\x05\x06"), true);
+
+        $this->assertStringContainsString('[r] => [redacted]', $dump);
+        $this->assertStringContainsString('[d] => [redacted]', $dump);
+        $this->assertStringContainsString('[t] => [redacted]', $dump);
+        $this->assertStringNotContainsString("\x01\x02", $dump);
+        $this->assertStringNotContainsString('AQI', $dump);
+    }
+
+    public function testCannotBeSerializedWithPhpSerialize(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessageIsOrContains(
+            'An "oth" entry cannot be serialized with serialize(); use the toJson() of its key',
+        );
+
+        serialize(new OtherPrimeInfo("\x01\x02", "\x03", "\x04"));
+    }
+
+    public function testRefusesAnEntryCraftedForPhpUnserialize(): void
+    {
+        $crafted = sprintf(
+            'O:%d:"%s":1:{s:11:"primeFactor";s:0:"";}',
+            strlen(OtherPrimeInfo::class),
+            OtherPrimeInfo::class,
+        );
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessageIsOrContains(
+            'An "oth" entry cannot be unserialized with unserialize(); use Jwk::fromJson()',
+        );
+
+        unserialize($crafted);
     }
 }

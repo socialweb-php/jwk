@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use JsonSerializable;
+use LogicException;
 use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
@@ -73,5 +74,39 @@ final readonly class OtherPrimeInfo implements JsonSerializable
             'd' => Base64Url::encode($this->factorCrtExponent),
             't' => Base64Url::encode($this->factorCrtCoefficient),
         ];
+    }
+
+    /**
+     * Returns what `var_dump()` and `print_r()` show: every member
+     * redacted, since every member is private
+     *
+     * @return array{r: string, d: string, t: string}
+     */
+    public function __debugInfo(): array
+    {
+        return ['r' => '[redacted]', 'd' => '[redacted]', 't' => '[redacted]'];
+    }
+
+    /**
+     * Refuses PHP serialization, which would write private members to a
+     * string the caller did not ask for; the JSON form of the key is the
+     * serialization
+     *
+     * @return array{}
+     */
+    public function __serialize(): array
+    {
+        throw new LogicException('An "oth" entry cannot be serialized with serialize(); use the toJson() of its key');
+    }
+
+    /**
+     * Refuses PHP unserialization, which would build an entry without
+     * checking its members
+     *
+     * @param array<array-key, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        throw new LogicException('An "oth" entry cannot be unserialized with unserialize(); use Jwk::fromJson()');
     }
 }
