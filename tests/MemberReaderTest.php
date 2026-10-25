@@ -65,7 +65,7 @@ class MemberReaderTest extends TestCase
             $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
             $this->assertNull($exception->member);
             $this->assertSame('The JSON text does not parse: Syntax error', $exception->getMessage());
-            $this->assertNotNull($exception->getPrevious());
+            $this->assertNull($exception->getPrevious());
         }
     }
 

@@ -583,10 +583,12 @@ class JwkTest extends TestCase
             'an EC private key that derives another point' => [
                 json_encode([...$ec, 'd' => Base64Url::encode($ecSecret)], JSON_THROW_ON_ERROR),
                 [$ecSecret, Base64Url::encode($ecSecret)],
+                InvalidJwkReason::KeyPairMismatch,
             ],
             'an RSA private exponent of another key' => [
                 json_encode([...$rsa, 'd' => $other['d']], JSON_THROW_ON_ERROR),
                 [Base64Url::decode(self::fixtureString($other, 'd')), self::fixtureString($other, 'd')],
+                InvalidJwkReason::KeyPairMismatch,
             ],
             'RSA primes of another key' => [
                 json_encode([...$rsa, 'p' => $other['p'], 'q' => $other['q']], JSON_THROW_ON_ERROR),
@@ -596,18 +598,24 @@ class JwkTest extends TestCase
                     Base64Url::decode(self::fixtureString($rsa, 'd')),
                     self::fixtureString($rsa, 'd'),
                 ],
+                InvalidJwkReason::KeyPairMismatch,
+            ],
+            'a malformed private key text' => [
+                json_encode($ec, JSON_THROW_ON_ERROR) . ',',
+                [self::fixtureString($ec, 'd'), Base64Url::decode(self::fixtureString($ec, 'd'))],
+                InvalidJwkReason::MalformedJson,
             ],
         ];
 
         $previous = ini_set('zend.exception_ignore_args', '0');
 
         try {
-            foreach ($cases as $label => [$json, $secrets]) {
+            foreach ($cases as $label => [$json, $secrets, $reason]) {
                 try {
                     Jwk::fromJson($json);
                     $this->fail('Expected InvalidJwk for ' . $label);
                 } catch (InvalidJwk $exception) {
-                    $this->assertSame(InvalidJwkReason::KeyPairMismatch, $exception->reason, $label);
+                    $this->assertSame($reason, $exception->reason, $label);
                     $this->assertInstanceOf(
                         SensitiveParameterValue::class,
                         self::fromJsonArgument($exception),

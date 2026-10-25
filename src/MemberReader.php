@@ -96,8 +96,6 @@ final class MemberReader
                 throw new InvalidJwk(
                     InvalidJwkReason::MalformedJson,
                     'The JSON text does not parse: ' . $exception->getMessage(),
-                    null,
-                    $exception,
                 );
             }
         }
