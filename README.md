@@ -13,7 +13,6 @@ TODO: Make sure the following URLs are correct and working for your project.
     <a href="https://github.com/socialweb-php/jwk/blob/main/LICENSE"><img src="https://img.shields.io/packagist/l/socialweb/jwk.svg?style=flat-square&colorB=darkcyan" alt="Read License"></a>
     <a href="https://github.com/socialweb-php/jwk/actions/workflows/continuous-integration.yml"><img src="https://img.shields.io/github/actions/workflow/status/socialweb-php/jwk/continuous-integration.yml?branch=main&style=flat-square&logo=github" alt="Build Status"></a>
     <a href="https://codecov.io/gh/socialweb-php/jwk"><img src="https://img.shields.io/codecov/c/gh/socialweb-php/jwk?label=codecov&logo=codecov&style=flat-square" alt="Codecov Code Coverage"></a>
-    <a href="https://shepherd.dev/github/socialweb-php/jwk"><img src="https://img.shields.io/endpoint?style=flat-square&url=https%3A%2F%2Fshepherd.dev%2Fgithub%2Fsocialweb-php%2Fjwk%2Fcoverage" alt="Psalm Type Coverage"></a>
 </p>
 -->
 
@@ -75,10 +74,8 @@ security issue in software that is maintained in this repository, please read
 
 ## Copyright and License
 
-socialweb/jwk is copyright © [socialweb/jwk Contributors](mailto:ben@ramsey.dev)
-and licensed for use under the terms of the
-GNU Lesser General Public License (LGPL-3.0-or-later) as published by the Free
-Software Foundation. Please see [COPYING.LESSER](COPYING.LESSER),
-[COPYING](COPYING), and [NOTICE](NOTICE) for more information.
-
-
+socialweb/jwk is copyright © socialweb/jwk Contributors and licensed for use
+under the terms of the GNU Lesser General Public License (LGPL-3.0-or-later) as
+published by the Free Software Foundation. Please see
+[COPYING.LESSER](COPYING.LESSER), [COPYING](COPYING), and [NOTICE](NOTICE) for
+more information.

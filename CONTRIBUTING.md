@@ -10,7 +10,7 @@ code.
 
 You can find help and discussion in the following places:
 
-* GitHub Issues: <https://github.com/socialweb/jwk/issues>
+* GitHub Issues: <https://github.com/socialweb-php/jwk/issues>
 
 ## Reporting Bugs
 
@@ -72,8 +72,8 @@ When you do begin working on your feature, here are some guidelines to consider:
   We will use this description to update the CHANGELOG. If there is no
   description, or it does not adequately describe your feature, we may ask you
   to update the description.
-* socialweb/jwk follows a superset of **[PSR-12 coding standard][psr-12]**.
-  Please ensure your code does, too. _Hint: run `composer dev:lint` to check._
+* socialweb/jwk follows a superset of the **[PER-CS coding standard][per-cs]**.
+  Please ensure your code does, too. _Hint: run `composer lint` to check._
 * Please **write tests** for any new features you add.
 * Please **ensure that tests pass** before submitting your pull request.
   socialweb/jwk automatically runs tests for pull requests. However,
@@ -90,12 +90,12 @@ When you do begin working on your feature, here are some guidelines to consider:
 
 ## Developing
 
-To develop this project, you will need [PHP](https://www.php.net) 7.4 or greater
+To develop this project, you will need [PHP](https://www.php.net) 8.5 or greater
 and [Composer](https://getcomposer.org).
 
 After cloning this repository locally, execute the following commands:
 
-``` bash
+```bash
 cd /path/to/repository
 composer install
 ```
@@ -111,41 +111,39 @@ to validate all staged changes prior to commit.
 
 To see all the commands available for contributing to this project:
 
-``` bash
+```bash
 composer list dev
 ```
 
 ### Coding Standards
 
-This project follows a superset of [PSR-12](https://www.php-fig.org/psr/psr-12/)
-coding standards, enforced by [PHP_CodeSniffer](https://github.com/squizlabs/PHP_CodeSniffer).
+This project follows a superset of [PER-CS][per-cs] coding standards, enforced
+by [PHP_CodeSniffer](https://github.com/PHPCSStandards/PHP_CodeSniffer).
 
 CaptainHook will run coding standards checks before committing.
 
 You may lint the codebase manually using the following commands:
 
-``` bash
+```bash
 # Lint
-composer dev:lint
+composer lint
 
 # Attempt to auto-fix coding standards issues
-composer dev:lint:fix
+composer fix
 ```
 
 ### Static Analysis
 
-This project uses a combination of [PHPStan](https://github.com/phpstan/phpstan)
-and [Psalm](https://github.com/vimeo/psalm) to provide static analysis of PHP
-code.
+This project uses [PHPStan](https://github.com/phpstan/phpstan) to perform
+static analysis of PHP code.
 
 CaptainHook will run static analysis checks before committing.
 
-You may run static analysis manually across the whole codebase with the
-following command:
+Static analysis runs as part of the `lint` command. You may run static analysis
+separately with the following command:
 
-``` bash
-# Static analysis
-composer dev:analyze
+```bash
+./vendor/bin/phpstan analyze
 ```
 
 ### Project Structure
@@ -169,9 +167,9 @@ composer test
 CaptainHook will automatically run all tests before pushing to the remote
 repository.
 
-[github]: https://github.com/socialweb/jwk
-[issues]: https://github.com/socialweb/jwk/issues
-[pull requests]: https://github.com/socialweb/jwk/pulls
-[psr-12]: https://www.php-fig.org/psr/psr-12/
+[github]: https://github.com/socialweb-php/jwk
+[issues]: https://github.com/socialweb-php/jwk/issues
+[pull requests]: https://github.com/socialweb-php/jwk/pulls
+[per-cs]: https://www.php-fig.org/per/coding-style/
 [gh-flow]: https://guides.github.com/introduction/flow/
 [conventional commits]: https://www.conventionalcommits.org/
