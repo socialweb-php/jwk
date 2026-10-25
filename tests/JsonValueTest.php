@@ -64,7 +64,11 @@ class JsonValueTest extends TestCase
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
-            $this->assertNull($exception->member);
+            $this->assertSame('m', $exception->member);
+            $this->assertSame(
+                'The "m" member is nested deeper than the 512 levels JSON text allows',
+                $exception->getMessage(),
+            );
         }
     }
 

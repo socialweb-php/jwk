@@ -462,9 +462,9 @@ class MemberReaderTest extends TestCase
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
-            $this->assertNull($exception->member);
+            $this->assertSame('deep', $exception->member);
             $this->assertSame(
-                'The JSON text does not parse: Maximum stack depth exceeded',
+                'The "deep" member is nested deeper than the 512 levels JSON text allows',
                 $exception->getMessage(),
             );
         }

@@ -766,6 +766,38 @@ class JwkTest extends TestCase
         }
     }
 
+    public function testRefusesAnAdditionalMemberNestedTooDeep(): void
+    {
+        $deepest = [];
+
+        for ($level = 1; $level < 510; $level++) {
+            $deepest = [$deepest];
+        }
+
+        $key = new OctKey("\x01", additionalMembers: ['deep' => $deepest]);
+        $this->assertSame($deepest, $key->additionalMembers['deep']);
+        $this->assertSame($key->toJson(), Jwk::fromJson($key->toJson())->toJson());
+
+        $attempts = [
+            static fn (): OctKey => new OctKey("\x01", additionalMembers: ['deep' => [$deepest]]),
+            static fn (): OctKey => $key->withAdditionalMember('deep', (object) ['a' => $deepest]),
+        ];
+
+        foreach ($attempts as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Expected InvalidJwk');
+            } catch (InvalidJwk $exception) {
+                $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+                $this->assertSame('deep', $exception->member);
+                $this->assertSame(
+                    'The "deep" member is nested deeper than the 512 levels JSON text allows',
+                    $exception->getMessage(),
+                );
+            }
+        }
+    }
+
     public function testKeepsPrivateKeyMaterialOutOfExceptionTraces(): void
     {
         $ec = self::fixtureSetMember('rfc7517/appendix-a2.json', 0);

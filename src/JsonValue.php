@@ -115,8 +115,9 @@ final class JsonValue
      *     UTF-8 or a number that is not finite; with `WrongType` for a
      *     value of a PHP type that is not a JSON type, including an object
      *     whose class is not `stdClass`; or with `MalformedJson` for a
-     *     member name that `checkName()` refuses or for objects and arrays
-     *     nested deeper than `json_decode()` reads JSON text
+     *     member name that `checkName()` refuses or, naming the member, for
+     *     objects and arrays nested deeper than `json_decode()` reads JSON
+     *     text
      */
     public static function read(string $member, #[SensitiveParameter] mixed $value): mixed
     {
@@ -128,7 +129,7 @@ final class JsonValue
             $target = &$next[2];
 
             if ($current instanceof stdClass && $current::class === stdClass::class) {
-                self::checkDepth($depth);
+                self::checkDepth($depth, $member);
                 $object = new stdClass();
                 $target = $object;
 
@@ -139,7 +140,7 @@ final class JsonValue
                     $pending[] = [$entry, $depth + 1, &$object->{$name}];
                 }
             } elseif (is_array($current) && array_is_list($current)) {
-                self::checkDepth($depth);
+                self::checkDepth($depth, $member);
                 $target = [];
 
                 /** @var mixed $entry */
@@ -148,7 +149,7 @@ final class JsonValue
                     $pending[] = [$entry, $depth + 1, &$target[$index]];
                 }
             } elseif (is_array($current)) {
-                self::checkDepth($depth);
+                self::checkDepth($depth, $member);
                 $object = new stdClass();
                 $target = $object;
 
@@ -209,17 +210,22 @@ final class JsonValue
     }
 
     /**
+     * Checks the depth of an object or array in a value that did not come
+     * from JSON text; `json_decode()` has already refused text nested this
+     * deep, with its own message
+     *
      * @param int $depth The depth of an object or array, the JWK itself
      *     being depth 1
      *
-     * @throws InvalidJwk
+     * @throws InvalidJwk with `MalformedJson` naming the member
      */
-    private static function checkDepth(int $depth): void
+    private static function checkDepth(int $depth, string $member): void
     {
         if ($depth > self::MAX_DEPTH) {
             throw new InvalidJwk(
                 InvalidJwkReason::MalformedJson,
-                'The JSON text does not parse: Maximum stack depth exceeded',
+                sprintf('The "%s" member is nested deeper than the 512 levels JSON text allows', $member),
+                $member,
             );
         }
     }
