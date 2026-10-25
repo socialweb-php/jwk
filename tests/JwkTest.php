@@ -346,8 +346,8 @@ class JwkTest extends TestCase
         $this->assertSame(['MIID'], $key->certificateChain);
         $this->assertSame('AQAB', $key->certificateSha1Thumbprint);
         $this->assertSame('AQAB', $key->certificateSha256Thumbprint);
-        $this->assertEquals(['ext' => true, 'nested' => (object) ['a' => [1, 2, 3]]], $key->additionalMembers);
-        $this->assertInstanceOf(stdClass::class, $key->additionalMembers['nested']);
+        $this->assertEquals(['ext' => true, 'nested' => (object) ['a' => [1, 2, 3]]], $key->additionalMembers());
+        $this->assertInstanceOf(stdClass::class, $key->additionalMembers()['nested']);
     }
 
     public function testWritesJsonObjectsInAdditionalMembersBackAsObjects(): void
@@ -374,7 +374,7 @@ class JwkTest extends TestCase
             . '"keyed":{"0":"a","2":"b"},"scalar":1.0}',
             json_encode($changed, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR),
         );
-        $this->assertNotSame($object, $changed->additionalMembers['object']);
+        $this->assertNotSame($object, $changed->additionalMembers()['object']);
         $this->assertSame(
             '{"kty":"oct","k":"AQ","nested":{"a":{}}}',
             new OctKey("\x01", additionalMembers: ['nested' => ['a' => new stdClass()]])->toJson(),
@@ -482,14 +482,14 @@ class JwkTest extends TestCase
         $this->assertSame(['MIID'], $changed->certificateChain);
         $this->assertSame('AAAA', $changed->certificateSha1Thumbprint);
         $this->assertSame('BBBB', $changed->certificateSha256Thumbprint);
-        $this->assertSame(['ext' => true], $changed->additionalMembers);
+        $this->assertSame(['ext' => true], $changed->additionalMembers());
         $this->assertInstanceOf(OkpKey::class, $changed);
         $this->assertSame($key->thumbprint(), $changed->thumbprint());
 
         $this->assertNull($key->keyId);
         $this->assertNull($key->algorithm);
         $this->assertSame([], $key->keyOperations);
-        $this->assertSame([], $key->additionalMembers);
+        $this->assertSame([], $key->additionalMembers());
     }
 
     public function testTheWithMethodsRemoveAMemberForNullOrAnEmptyList(): void
@@ -566,16 +566,19 @@ class JwkTest extends TestCase
             }
         }
 
-        $this->assertSame(['n' => 1], $key->withAdditionalMember('n', 1)->additionalMembers);
+        $this->assertSame(['n' => 1], $key->withAdditionalMember('n', 1)->additionalMembers());
     }
 
     public function testAnAdditionalMemberCanBeReplacedAndRemoved(): void
     {
         $key = Jwk::fromJson([...self::fixture('rfc8037/appendix-a2.json'), 'ext' => true, 'other' => 1]);
 
-        $this->assertSame(['ext' => false, 'other' => 1], $key->withAdditionalMember('ext', false)->additionalMembers);
-        $this->assertSame(['other' => 1], $key->withoutAdditionalMember('ext')->additionalMembers);
-        $this->assertSame(['ext' => true, 'other' => 1], $key->withoutAdditionalMember('missing')->additionalMembers);
+        $this->assertSame(
+            ['ext' => false, 'other' => 1],
+            $key->withAdditionalMember('ext', false)->additionalMembers(),
+        );
+        $this->assertSame(['other' => 1], $key->withoutAdditionalMember('ext')->additionalMembers());
+        $this->assertSame(['ext' => true, 'other' => 1], $key->withoutAdditionalMember('missing')->additionalMembers());
     }
 
     public function testCannotBeSerializedWithPhpSerialize(): void
@@ -775,7 +778,7 @@ class JwkTest extends TestCase
         }
 
         $key = new OctKey("\x01", additionalMembers: ['deep' => $deepest]);
-        $this->assertSame($deepest, $key->additionalMembers['deep']);
+        $this->assertSame($deepest, $key->additionalMembers()['deep']);
         $this->assertSame($key->toJson(), Jwk::fromJson($key->toJson())->toJson());
 
         $attempts = [
@@ -796,6 +799,49 @@ class JwkTest extends TestCase
                 );
             }
         }
+    }
+
+    public function testTheAdditionalMembersACallerGetsAreCopies(): void
+    {
+        $json = '{"kty":"oct","k":"AQAB","ext":{"a":"b","list":[{"c":1}]}}';
+        $key = Jwk::fromJson($json);
+
+        $members = $key->additionalMembers();
+        $this->assertInstanceOf(stdClass::class, $members['ext']);
+        $members['ext']->a = "\xff";
+        $members['ext']->list = 'changed';
+        $members['added'] = 1;
+
+        $serialized = $key->jsonSerialize();
+        $this->assertInstanceOf(stdClass::class, $serialized['ext']);
+        $serialized['ext']->a = 'changed';
+        $this->assertIsArray($serialized['ext']->list);
+        $this->assertInstanceOf(stdClass::class, $serialized['ext']->list[0]);
+        $serialized['ext']->list[0]->c = NAN;
+
+        $debug = $key->__debugInfo();
+        $this->assertInstanceOf(stdClass::class, $debug['ext']);
+        $debug['ext']->a = 'changed';
+
+        $this->assertSame($json, $key->toJson());
+        $this->assertNotSame($key->additionalMembers()['ext'], $key->additionalMembers()['ext']);
+    }
+
+    public function testAKeyMadeByAWithMethodIsIndependentOfTheOriginal(): void
+    {
+        $json = '{"kty":"oct","k":"AQAB","ext":{"a":"b"}}';
+        $key = Jwk::fromJson($json);
+        $changed = $key->withKeyId('k1');
+
+        $members = $changed->additionalMembers();
+        $this->assertInstanceOf(stdClass::class, $members['ext']);
+        $members['ext']->a = 'changed';
+        $changedAgain = $changed->withAdditionalMember('ext', $members['ext']);
+        $members['ext']->a = "\xff";
+
+        $this->assertSame($json, $key->toJson());
+        $this->assertSame('{"kty":"oct","k":"AQAB","kid":"k1","ext":{"a":"b"}}', $changed->toJson());
+        $this->assertSame('{"kty":"oct","k":"AQAB","kid":"k1","ext":{"a":"changed"}}', $changedAgain->toJson());
     }
 
     public function testKeepsPrivateKeyMaterialOutOfExceptionTraces(): void

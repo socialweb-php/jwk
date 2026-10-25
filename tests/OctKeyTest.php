@@ -39,7 +39,7 @@ class OctKeyTest extends TestCase
         $this->assertSame('sig', $key->use);
         $this->assertSame('HS256', $key->algorithm);
         $this->assertTrue($key->isPrivate());
-        $this->assertSame([], $key->additionalMembers);
+        $this->assertSame([], $key->additionalMembers());
         $this->assertEquals($fixture, $key->jsonSerialize());
     }
 

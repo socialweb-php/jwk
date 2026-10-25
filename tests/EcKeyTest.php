@@ -44,7 +44,7 @@ class EcKeyTest extends TestCase
         $this->assertNull($key->privateKey);
         $this->assertFalse($key->isPrivate());
         $this->assertSame('Public key used in JWS spec Appendix A.3 example', $key->keyId);
-        $this->assertSame([], $key->additionalMembers);
+        $this->assertSame([], $key->additionalMembers());
         $this->assertEquals($fixture, $key->jsonSerialize());
     }
 
@@ -87,7 +87,7 @@ class EcKeyTest extends TestCase
         $this->assertSame($private, $key->isPrivate());
         $this->assertSame($curve->publicKeyLength(), strlen($key->x));
         $this->assertSame($curve->publicKeyLength(), strlen($key->y));
-        $this->assertSame([], $key->additionalMembers);
+        $this->assertSame([], $key->additionalMembers());
         $this->assertEquals($fixture, $key->jsonSerialize());
         $this->assertSame($key->thumbprint(), $key->toPublic()->thumbprint());
 

@@ -74,9 +74,12 @@ abstract readonly class Jwk implements JsonSerializable
      * with each JSON object in a value as a `stdClass` and each JSON array
      * as a PHP list, as `json_decode()` gives them by default
      *
+     * The key's own objects never leave it: `additionalMembers()`,
+     * `jsonSerialize()`, and `__debugInfo()` return copies.
+     *
      * @var array<string, mixed>
      */
-    public array $additionalMembers;
+    private array $additionalMembers;
 
     /**
      * @param ?string $keyId The `kid` member
@@ -228,7 +231,8 @@ abstract readonly class Jwk implements JsonSerializable
      * the additional members as received
      *
      * A private key writes its private members; `toPublic()` first is how
-     * a caller publishes one.
+     * a caller publishes one. The additional members are a copy, as
+     * `additionalMembers()` returns them.
      *
      * @return array<string, mixed>
      */
@@ -347,6 +351,30 @@ abstract readonly class Jwk implements JsonSerializable
     public function withCertificateSha256Thumbprint(?string $thumbprint): static
     {
         return $this->withCommonMembers(['certificateSha256Thumbprint' => $thumbprint]);
+    }
+
+    /**
+     * Returns every member the package does not define, in the order
+     * received
+     *
+     * Each JSON object in a value is a `stdClass` and each JSON array a PHP
+     * list, as `json_decode()` gives them by default. The members are a
+     * copy: changing them, or an object inside them, does not change the
+     * key.
+     *
+     * @return array<string, mixed>
+     */
+    public function additionalMembers(): array
+    {
+        $members = [];
+
+        /** @var mixed $value */
+        foreach ($this->additionalMembers as $name => $value) {
+            $name = (string) $name;
+            $members[$name] = JsonValue::read($name, $value);
+        }
+
+        return $members;
     }
 
     /**
@@ -693,7 +721,7 @@ abstract readonly class Jwk implements JsonSerializable
         }
 
         /** @var mixed $value */
-        foreach ($this->additionalMembers as $name => $value) {
+        foreach ($this->additionalMembers() as $name => $value) {
             $json[$name] = $value;
         }
 

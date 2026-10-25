@@ -86,7 +86,7 @@ class OkpKeyTest extends TestCase
         $this->assertTrue($key->isPrivate());
         $this->assertSame(self::hex(self::ED25519_TEST1_SECRET), $key->privateKey);
         $this->assertSame(self::hex(self::ED25519_TEST1_PUBLIC), $key->publicKey);
-        $this->assertSame([], $key->additionalMembers);
+        $this->assertSame([], $key->additionalMembers());
         $this->assertEquals($fixture, $key->jsonSerialize());
     }
 

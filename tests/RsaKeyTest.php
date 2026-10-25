@@ -75,7 +75,7 @@ class RsaKeyTest extends TestCase
         $this->assertNotNull($key->secondFactorCrtExponent);
         $this->assertNotNull($key->firstCrtCoefficient);
         $this->assertSame([], $key->otherPrimesInfo);
-        $this->assertSame([], $key->additionalMembers);
+        $this->assertSame([], $key->additionalMembers());
         $this->assertEquals($fixture, $key->jsonSerialize());
     }
 
