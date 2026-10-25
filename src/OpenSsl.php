@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace SocialWeb\Jwk;
 
+use LogicException;
 use OpenSSLAsymmetricKey;
 use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
@@ -30,12 +31,15 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 use function array_key_first;
+use function array_keys;
 use function count;
 use function implode;
 use function in_array;
+use function is_array;
 use function is_string;
 use function ltrim;
 use function openssl_error_string;
+use function openssl_get_curve_names;
 use function openssl_pkey_get_details;
 use function openssl_pkey_new;
 use function sprintf;
@@ -55,7 +59,17 @@ use const STR_PAD_LEFT;
  */
 final class OpenSsl
 {
-    private const array KEY_TYPES = ['rsa', 'ec', 'ed25519', 'ed448', 'x25519', 'x448'];
+    /**
+     * The members OpenSSL reads from each entry, by the entry's key type
+     */
+    private const array MEMBER_NAMES = [
+        'rsa' => ['n', 'e', 'd', 'p', 'q', 'dmp1', 'dmq1', 'iqmp'],
+        'ec' => ['curve_name', 'x', 'y', 'd'],
+        'ed25519' => ['pub_key', 'priv_key'],
+        'ed448' => ['pub_key', 'priv_key'],
+        'x25519' => ['pub_key', 'priv_key'],
+        'x448' => ['pub_key', 'priv_key'],
+    ];
 
     /**
      * Builds a key from its members through `openssl_pkey_new()`
@@ -67,7 +81,7 @@ final class OpenSsl
      *
      * @param array<string, array<string, string>> $members One entry, named
      *     for the key type, that holds at least one member besides
-     *     `curve_name`
+     *     `curve_name`, and only members OpenSSL reads for that key type
      * @param InvalidJwkReason $reason The reason to report when OpenSSL
      *     refuses the members
      * @param string $member The member to name in that case
@@ -75,7 +89,9 @@ final class OpenSsl
      *     error text is appended when there is any
      *
      * @throws InvalidArgument when the members are not one entry of a known
-     *     key type that holds a member besides `curve_name`
+     *     key type that holds a member besides `curve_name`; when the entry
+     *     has a member OpenSSL does not read for that key type; or when an
+     *     `ec` entry has no `curve_name` or one OpenSSL does not know
      * @throws InvalidJwk when OpenSSL refuses the members, or builds a key
      *     that does not report them back, which is a generated key
      */
@@ -91,8 +107,20 @@ final class OpenSsl
 
         $type = array_key_first($members);
 
-        if (!in_array($type, self::KEY_TYPES, true)) {
+        if (!in_array($type, array_keys(self::MEMBER_NAMES), true)) {
             throw new InvalidArgument(sprintf('The entry "%s" is not a key type OpenSSL builds from members', $type));
+        }
+
+        foreach (array_keys($members[$type]) as $name) {
+            if (!in_array($name, self::MEMBER_NAMES[$type], true)) {
+                throw new InvalidArgument(
+                    sprintf('The "%s" entry has the member "%s", which OpenSSL does not read for it', $type, $name),
+                );
+            }
+        }
+
+        if ($type === 'ec') {
+            self::checkCurveName($members['ec']['curve_name'] ?? null);
         }
 
         $given = $members[$type];
@@ -133,9 +161,13 @@ final class OpenSsl
      */
     public static function details(OpenSSLAsymmetricKey $key): array
     {
-        /** @var array<string, mixed> $details */
         $details = openssl_pkey_get_details($key);
 
+        if ($details === false) {
+            throw new LogicException('OpenSSL reported no details for a key it holds: ' . self::drainErrors());
+        }
+
+        /** @var array<string, mixed> $details */
         return $details;
     }
 
@@ -152,6 +184,23 @@ final class OpenSsl
         }
 
         return implode('; ', $errors);
+    }
+
+    /**
+     * @throws InvalidArgument when the curve name is missing or is not one
+     *     OpenSSL knows
+     */
+    private static function checkCurveName(?string $curveName): void
+    {
+        if ($curveName === null) {
+            throw new InvalidArgument('The "ec" entry must hold a "curve_name" member');
+        }
+
+        $known = openssl_get_curve_names();
+
+        if (!is_array($known) || !in_array($curveName, $known, true)) {
+            throw new InvalidArgument(sprintf('The curve name "%s" is not one OpenSSL knows', $curveName));
+        }
     }
 
     private static function refusal(InvalidJwkReason $reason, string $message, string $member): InvalidJwk

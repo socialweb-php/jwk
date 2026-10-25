@@ -118,6 +118,107 @@ class OpenSslTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{array<string, array<string, string>>, string}>
+     */
+    public static function unreadMembersProvider(): iterable
+    {
+        $scalar = str_repeat("\x01", 32);
+
+        yield 'an rsa member OpenSSL does not read' => [
+            ['rsa' => ['n' => "\xc3", 'e' => "\x03", 'd' => "\x01", 'foo' => 'x']],
+            'The "rsa" entry has the member "foo", which OpenSSL does not read for it',
+        ];
+        yield 'an ec member OpenSSL does not read' => [
+            ['ec' => ['curve_name' => 'prime256v1', 'd' => $scalar, 'pub_key' => 'x']],
+            'The "ec" entry has the member "pub_key", which OpenSSL does not read for it',
+        ];
+        yield 'an ed25519 member OpenSSL does not read' => [
+            ['ed25519' => ['x' => $scalar]],
+            'The "ed25519" entry has the member "x", which OpenSSL does not read for it',
+        ];
+        yield 'an x448 member OpenSSL does not read' => [
+            ['x448' => ['d' => $scalar]],
+            'The "x448" entry has the member "d", which OpenSSL does not read for it',
+        ];
+        yield 'an ec entry without a curve name' => [
+            ['ec' => ['d' => $scalar]],
+            'The "ec" entry must hold a "curve_name" member',
+        ];
+        yield 'an ec entry with a curve name OpenSSL does not know' => [
+            ['ec' => ['curve_name' => 'P-256', 'd' => $scalar]],
+            'The curve name "P-256" is not one OpenSSL knows',
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, string>> $members
+     */
+    #[DataProvider('unreadMembersProvider')]
+    public function testRefusesMembersOpenSslDoesNotRead(array $members, string $message): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains($message);
+
+        OpenSsl::build($members, InvalidJwkReason::InvalidValue, 'x', 'unused');
+    }
+
+    public function testBuildsFromEveryMemberOpenSslReadsForAnRsaKey(): void
+    {
+        $fixture = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $names = [
+            'n' => 'n',
+            'e' => 'e',
+            'd' => 'd',
+            'p' => 'p',
+            'q' => 'q',
+            'dmp1' => 'dp',
+            'dmq1' => 'dq',
+            'iqmp' => 'qi',
+        ];
+        $members = [];
+
+        foreach ($names as $name => $member) {
+            $members[$name] = Base64Url::decode(self::fixtureString($fixture, $member));
+        }
+
+        $key = OpenSsl::build(['rsa' => $members], InvalidJwkReason::InvalidValue, 'n', 'unused');
+
+        /** @var array{rsa: array<string, string>} $details */
+        $details = OpenSsl::details($key);
+
+        $this->assertSame($members['iqmp'], $details['rsa']['iqmp']);
+    }
+
+    public function testBuildsFromEveryMemberOpenSslReadsForOkpKeys(): void
+    {
+        $privateKey = self::hex('9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60');
+        $key = OpenSsl::build(
+            ['ed25519' => ['priv_key' => $privateKey]],
+            InvalidJwkReason::InvalidValue,
+            'd',
+            'unused',
+        );
+
+        /** @var array{ed25519: array{priv_key: string}} $details */
+        $details = OpenSsl::details($key);
+        $this->assertSame($privateKey, $details['ed25519']['priv_key']);
+
+        foreach (['ed448' => 57, 'x25519' => 32, 'x448' => 56] as $type => $length) {
+            $publicKey = str_repeat("\x09", $length);
+            $key = OpenSsl::build(
+                [$type => ['pub_key' => $publicKey]],
+                InvalidJwkReason::InvalidValue,
+                'x',
+                'unused',
+            );
+
+            /** @var array<string, array{pub_key: string}> $details */
+            $details = OpenSsl::details($key);
+            $this->assertSame($publicKey, $details[$type]['pub_key']);
+        }
+    }
+
+    /**
      * @return iterable<string, array{string}>
      */
     public static function badScalarProvider(): iterable
