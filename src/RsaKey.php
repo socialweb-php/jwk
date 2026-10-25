@@ -177,7 +177,7 @@ final readonly class RsaKey extends Jwk
     /**
      * @internal
      */
-    protected static function fromMembers(MemberReader $members): self
+    protected static function fromMembers(#[SensitiveParameter] MemberReader $members): self
     {
         $otherPrimesInfo = [];
 
@@ -231,7 +231,7 @@ final readonly class RsaKey extends Jwk
 
         if ($this->otherPrimesInfo !== []) {
             $members['oth'] = array_map(
-                static fn (OtherPrimeInfo $info): array => $info->jsonSerialize(),
+                static fn (#[SensitiveParameter] OtherPrimeInfo $info): array => $info->jsonSerialize(),
                 $this->otherPrimesInfo,
             );
         }
@@ -283,7 +283,7 @@ final readonly class RsaKey extends Jwk
             'dp' => $this->firstFactorCrtExponent,
             'dq' => $this->secondFactorCrtExponent,
             'qi' => $this->firstCrtCoefficient,
-        ], static fn (?string $value): bool => $value !== null);
+        ], static fn (#[SensitiveParameter] ?string $value): bool => $value !== null);
     }
 
     /**
@@ -388,7 +388,7 @@ final readonly class RsaKey extends Jwk
      *
      * @throws InvalidJwk with `KeyPairMismatch`
      */
-    private function buildPrivateOpenSslKey(string $privateExponent): OpenSSLAsymmetricKey
+    private function buildPrivateOpenSslKey(#[SensitiveParameter] string $privateExponent): OpenSSLAsymmetricKey
     {
         $members = ['n' => $this->modulus, 'e' => $this->publicExponent, 'd' => $privateExponent];
 
@@ -424,7 +424,10 @@ final readonly class RsaKey extends Jwk
         $factors = [
             $private['p'],
             $private['q'],
-            ...array_map(static fn (OtherPrimeInfo $info): string => $info->primeFactor, $this->otherPrimesInfo),
+            ...array_map(
+                static fn (#[SensitiveParameter] OtherPrimeInfo $info): string => $info->primeFactor,
+                $this->otherPrimesInfo,
+            ),
         ];
 
         if (ByteInteger::product($factors) !== $this->modulus) {

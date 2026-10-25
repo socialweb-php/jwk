@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use JsonException;
+use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
@@ -59,8 +60,10 @@ final class MemberReader
      * @param bool $fromText Whether JSON text was decoded, so that an array
      *     in the members is a JSON array and never a JSON object
      */
-    private function __construct(private readonly array $members, private readonly bool $fromText)
-    {
+    private function __construct(
+        #[SensitiveParameter] private readonly array $members,
+        private readonly bool $fromText,
+    ) {
     }
 
     /**
@@ -81,7 +84,7 @@ final class MemberReader
      * @throws InvalidJwk with `MalformedJson` when the text does not parse,
      *     or with `NotAnObject` when the value is not a JSON object
      */
-    public static function fromJson(string | array $json): self
+    public static function fromJson(#[SensitiveParameter] string | array $json): self
     {
         $fromText = is_string($json);
 
@@ -319,7 +322,7 @@ final class MemberReader
      *
      * @phpstan-assert-if-true array<array-key, mixed> | stdClass $value
      */
-    private static function isObject(mixed $value, bool $fromText): bool
+    private static function isObject(#[SensitiveParameter] mixed $value, bool $fromText): bool
     {
         if ($value instanceof stdClass) {
             return true;

@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use OpenSSLAsymmetricKey;
+use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
@@ -79,7 +80,7 @@ final class OpenSsl
      *     that does not report them back, which is a generated key
      */
     public static function build(
-        array $members,
+        #[SensitiveParameter] array $members,
         InvalidJwkReason $reason,
         string $member,
         string $message,

@@ -103,7 +103,7 @@ final readonly class OctKey extends Jwk
     /**
      * @internal
      */
-    protected static function fromMembers(MemberReader $members): self
+    protected static function fromMembers(#[SensitiveParameter] MemberReader $members): self
     {
         return new self($members->requiredBytes('k'), ...self::commonArguments($members, ['k']));
     }

@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace SocialWeb\Jwk;
 
+use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
@@ -52,7 +53,7 @@ final class ByteInteger
      * value: no leading zero byte, except that zero itself is the single
      * byte `0x00`
      */
-    public static function isMinimal(string $bytes): bool
+    public static function isMinimal(#[SensitiveParameter] string $bytes): bool
     {
         return $bytes === "\0" || ($bytes !== '' && $bytes[0] !== "\0");
     }
@@ -60,7 +61,7 @@ final class ByteInteger
     /**
      * Returns whether the bytes represent zero
      */
-    public static function isZero(string $bytes): bool
+    public static function isZero(#[SensitiveParameter] string $bytes): bool
     {
         return ltrim($bytes, "\0") === '';
     }
@@ -72,7 +73,7 @@ final class ByteInteger
      * @throws InvalidJwk with `InvalidValue` for an empty or zero value, or
      *     with `NonMinimalInteger` for a leading zero byte
      */
-    public static function checkRsaMember(string $member, string $bytes): void
+    public static function checkRsaMember(string $member, #[SensitiveParameter] string $bytes): void
     {
         if ($bytes === '') {
             throw new InvalidJwk(
@@ -102,7 +103,7 @@ final class ByteInteger
     /**
      * Returns the product of two unsigned integers, in minimal form
      */
-    public static function multiply(string $a, string $b): string
+    public static function multiply(#[SensitiveParameter] string $a, #[SensitiveParameter] string $b): string
     {
         $lengthA = strlen($a);
         $lengthB = strlen($b);
@@ -128,7 +129,7 @@ final class ByteInteger
      *
      * @param non-empty-list<string> $factors
      */
-    public static function product(array $factors): string
+    public static function product(#[SensitiveParameter] array $factors): string
     {
         $product = "\x01";
 
@@ -143,7 +144,7 @@ final class ByteInteger
      * Returns the bytes without their leading zero bytes, keeping one byte
      * for zero
      */
-    public static function minimal(string $bytes): string
+    public static function minimal(#[SensitiveParameter] string $bytes): string
     {
         $trimmed = ltrim($bytes, "\0");
 

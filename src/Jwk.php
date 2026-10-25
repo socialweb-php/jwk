@@ -26,6 +26,7 @@ namespace SocialWeb\Jwk;
 use JsonSerializable;
 use LogicException;
 use OpenSSLAsymmetricKey;
+use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
@@ -107,8 +108,10 @@ abstract readonly class Jwk implements JsonSerializable
      * @throws InvalidJwk when the input is not a well-formed JWK of a type
      *     the package implements; the reason says which rule it broke
      */
-    public static function fromJson(string | array $json, bool $publicOnly = false): RsaKey | EcKey | OkpKey | OctKey
-    {
+    public static function fromJson(
+        #[SensitiveParameter] string | array $json,
+        bool $publicOnly = false,
+    ): RsaKey | EcKey | OkpKey | OctKey {
         $members = MemberReader::fromJson($json);
         $kty = $members->requiredString('kty');
         $keyType = KeyType::tryFrom($kty) ?? throw new InvalidJwk(
@@ -401,8 +404,10 @@ abstract readonly class Jwk implements JsonSerializable
      *     additionalMembers: array<string, mixed>,
      * }
      */
-    protected static function commonArguments(MemberReader $members, array $keyMemberNames): array
-    {
+    protected static function commonArguments(
+        #[SensitiveParameter] MemberReader $members,
+        array $keyMemberNames,
+    ): array {
         return [
             'keyId' => $members->string('kid'),
             'algorithm' => $members->string('alg'),
@@ -421,8 +426,12 @@ abstract readonly class Jwk implements JsonSerializable
      *
      * @throws InvalidJwk with `WrongLength`
      */
-    protected static function checkLength(string $member, string $bytes, int $length, Curve $curve): void
-    {
+    protected static function checkLength(
+        string $member,
+        #[SensitiveParameter] string $bytes,
+        int $length,
+        Curve $curve,
+    ): void {
         if (strlen($bytes) !== $length) {
             throw new InvalidJwk(
                 InvalidJwkReason::WrongLength,
@@ -591,7 +600,7 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * @throws InvalidJwk with `SymmetricKey` or `PrivateMembersPresent`
      */
-    private static function refusePrivateMembers(MemberReader $members, KeyType $keyType): void
+    private static function refusePrivateMembers(#[SensitiveParameter] MemberReader $members, KeyType $keyType): void
     {
         if ($keyType === KeyType::Oct) {
             throw new InvalidJwk(

@@ -127,7 +127,7 @@ final readonly class OkpKey extends Jwk
     /**
      * @internal
      */
-    protected static function fromMembers(MemberReader $members): self
+    protected static function fromMembers(#[SensitiveParameter] MemberReader $members): self
     {
         $crv = $members->requiredString('crv');
         $curve = Curve::tryFrom($crv) ?? throw new InvalidJwk(
@@ -219,8 +219,10 @@ final readonly class OkpKey extends Jwk
      *
      * @throws InvalidJwk with `KeyPairMismatch`
      */
-    private function buildPrivateOpenSslKey(string $detailsKey, string $privateKey): OpenSSLAsymmetricKey
-    {
+    private function buildPrivateOpenSslKey(
+        string $detailsKey,
+        #[SensitiveParameter] string $privateKey,
+    ): OpenSSLAsymmetricKey {
         $key = OpenSsl::build(
             [$detailsKey => ['priv_key' => $privateKey]],
             InvalidJwkReason::KeyPairMismatch,

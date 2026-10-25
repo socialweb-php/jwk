@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace SocialWeb\Jwk;
 
+use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 
 use function base64_decode;
@@ -52,7 +53,7 @@ final class Base64Url
     /**
      * Returns the base64url encoding of the bytes, without padding
      */
-    public static function encode(string $bytes): string
+    public static function encode(#[SensitiveParameter] string $bytes): string
     {
         return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
     }
@@ -66,7 +67,7 @@ final class Base64Url
      *     character has bits set that the bytes do not use, which RFC 4648
      *     section 3.5 calls a non-canonical encoding
      */
-    public static function decode(string $text): string
+    public static function decode(#[SensitiveParameter] string $text): string
     {
         if (strspn($text, self::ALPHABET) !== strlen($text)) {
             throw new InvalidArgument('The text has a character outside the base64url alphabet');

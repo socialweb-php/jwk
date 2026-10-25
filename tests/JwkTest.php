@@ -6,6 +6,7 @@ namespace SocialWeb\Test\Jwk;
 
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use SensitiveParameterValue;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\EcKey;
 use SocialWeb\Jwk\Exception\InvalidArgument;
@@ -18,11 +19,19 @@ use SocialWeb\Jwk\KeyUse;
 use SocialWeb\Jwk\OctKey;
 use SocialWeb\Jwk\OkpKey;
 use SocialWeb\Jwk\RsaKey;
+use Throwable;
 
 use function array_keys;
 use function hash;
+use function ini_set;
+use function is_array;
+use function is_object;
+use function is_string;
 use function json_decode;
+use function json_encode;
 use function serialize;
+use function str_contains;
+use function str_repeat;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -488,5 +497,128 @@ class JwkTest extends TestCase
         $this->expectException(LogicException::class);
 
         serialize(new OctKey("\x01"));
+    }
+
+    public function testKeepsPrivateKeyMaterialOutOfExceptionTraces(): void
+    {
+        $ec = self::fixtureSetMember('rfc7517/appendix-a2.json', 0);
+        $rsa = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $other = self::fixture('rfc7520/section-3.4.json');
+        $ecSecret = str_repeat("\x11", 32);
+
+        $cases = [
+            'an EC private key that derives another point' => [
+                json_encode([...$ec, 'd' => Base64Url::encode($ecSecret)], JSON_THROW_ON_ERROR),
+                [$ecSecret, Base64Url::encode($ecSecret)],
+            ],
+            'an RSA private exponent of another key' => [
+                json_encode([...$rsa, 'd' => $other['d']], JSON_THROW_ON_ERROR),
+                [Base64Url::decode(self::fixtureString($other, 'd')), self::fixtureString($other, 'd')],
+            ],
+            'RSA primes of another key' => [
+                json_encode([...$rsa, 'p' => $other['p'], 'q' => $other['q']], JSON_THROW_ON_ERROR),
+                [
+                    Base64Url::decode(self::fixtureString($other, 'p')),
+                    self::fixtureString($other, 'p'),
+                    Base64Url::decode(self::fixtureString($rsa, 'd')),
+                    self::fixtureString($rsa, 'd'),
+                ],
+            ],
+        ];
+
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            foreach ($cases as $label => [$json, $secrets]) {
+                try {
+                    Jwk::fromJson($json);
+                    $this->fail('Expected InvalidJwk for ' . $label);
+                } catch (InvalidJwk $exception) {
+                    $this->assertSame(InvalidJwkReason::KeyPairMismatch, $exception->reason, $label);
+                    $this->assertInstanceOf(
+                        SensitiveParameterValue::class,
+                        self::fromJsonArgument($exception),
+                        $label,
+                    );
+
+                    $leaks = [];
+
+                    foreach (self::traceStrings($exception) as $string) {
+                        foreach ([$json, ...$secrets] as $secret) {
+                            if (str_contains($string, $secret)) {
+                                $leaks[] = Base64Url::encode($secret);
+                            }
+                        }
+                    }
+
+                    $this->assertSame([], $leaks, $label);
+                }
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', $previous === false ? '1' : $previous);
+        }
+    }
+
+    /**
+     * Returns the first argument of the `Jwk::fromJson()` frame of the trace
+     */
+    private static function fromJsonArgument(Throwable $exception): mixed
+    {
+        foreach ($exception->getTrace() as $frame) {
+            if (($frame['class'] ?? null) === Jwk::class && $frame['function'] === 'fromJson') {
+                return $frame['args'][0] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns every string in the arguments of every frame of the trace of
+     * the exception and of the exceptions before it, looking inside arrays
+     * and the properties of objects
+     *
+     * @return list<string>
+     */
+    private static function traceStrings(Throwable $exception): array
+    {
+        $strings = [];
+
+        for ($current = $exception; $current !== null; $current = $current->getPrevious()) {
+            foreach ($current->getTrace() as $frame) {
+                foreach ($frame['args'] ?? [] as $argument) {
+                    self::collectStrings($argument, $strings, 0);
+                }
+            }
+        }
+
+        return $strings;
+    }
+
+    /**
+     * @param list<string> $strings
+     */
+    private static function collectStrings(mixed $value, array &$strings, int $depth): void
+    {
+        if ($depth > 8 || $value instanceof SensitiveParameterValue) {
+            return;
+        }
+
+        if (is_string($value)) {
+            $strings[] = $value;
+
+            return;
+        }
+
+        if (is_object($value)) {
+            $value = (array) $value;
+        }
+
+        if (is_array($value)) {
+            /** @var mixed $entry */
+            foreach ($value as $entry) {
+                self::collectStrings($entry, $strings, $depth + 1);
+            }
+        }
     }
 }
