@@ -15,6 +15,7 @@ use SocialWeb\Jwk\KeyType;
 
 use function array_keys;
 use function hash;
+use function openssl_error_string;
 use function openssl_pkey_get_details;
 use function openssl_pkey_new;
 use function openssl_verify;
@@ -216,6 +217,16 @@ class EcKeyTest extends TestCase
             InvalidJwkReason::KeyPairMismatch,
             'd',
         ];
+        yield 'a d of 32 zero bytes' => [
+            [...$a2, 'd' => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'],
+            InvalidJwkReason::KeyPairMismatch,
+            'd',
+        ];
+        yield 'a d equal to the curve order' => [
+            [...$a2, 'd' => '_____wAAAAD__________7zm-q2nF56E87nKwvxjJVE'],
+            InvalidJwkReason::KeyPairMismatch,
+            'd',
+        ];
         yield 'an x that is not base64url' => [
             [...$a2, 'x' => 'not+base64url'],
             InvalidJwkReason::InvalidBase64Url,
@@ -237,6 +248,8 @@ class EcKeyTest extends TestCase
             $this->assertSame($reason, $exception->reason);
             $this->assertSame($member, $exception->member);
         }
+
+        $this->assertFalse(openssl_error_string());
     }
 
     public function testTheMessagesNameTheCurveAndTheLengths(): void
@@ -280,6 +293,8 @@ class EcKeyTest extends TestCase
                 $exception->getMessage(),
             );
         }
+
+        $this->assertFalse(openssl_error_string());
     }
 
     public function testRedactsThePrivateKeyWhenDumped(): void

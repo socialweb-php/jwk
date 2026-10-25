@@ -400,12 +400,16 @@ class RsaKeyTest extends TestCase
             $this->assertSame('The "d" member does not belong to the "n" and "e" members', $exception->getMessage());
         }
 
+        $this->assertFalse(openssl_error_string());
+
         try {
             Jwk::fromJson([...$a2, 'p' => $other['p'], 'q' => $other['q']]);
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
             $this->assertSame('The prime factors do not multiply to the "n" member', $exception->getMessage());
         }
+
+        $this->assertFalse(openssl_error_string());
     }
 
     public function testRedactsThePrivateMembersWhenDumped(): void
