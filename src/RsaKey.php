@@ -27,6 +27,7 @@ use OpenSSLAsymmetricKey;
 use SensitiveParameter;
 use SocialWeb\Jwk\Exception\ConversionFailed;
 use SocialWeb\Jwk\Exception\ConversionFailedReason;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
@@ -93,6 +94,8 @@ final readonly class RsaKey extends Jwk
      *     when the other primes are not a list of `OtherPrimeInfo`; with
      *     `KeyPairMismatch` when the private members do not belong to the
      *     public ones; or as the common members' rules say
+     * @throws InvalidArgument when an additional member is named after a member
+     *     the key type defines
      */
     public function __construct(
         public string $modulus,

@@ -26,8 +26,11 @@ namespace SocialWeb\Jwk\Exception;
 use InvalidArgumentException;
 
 /**
- * Thrown for a caller's own mistake: an empty key identifier, a PEM given
- * as a `file://` string, or a malformed string given to an internal decoder
+ * Thrown for a caller's own mistake: an additional member named after a
+ * member the key type defines, given to `withAdditionalMember()` or to a
+ * key class's constructor; a string that is not base64url, given to
+ * `Base64Url::decode()`; or members that describe no key OpenSSL builds,
+ * given to `OpenSsl::build()`
  */
 final class InvalidArgument extends InvalidArgumentException implements JwkException
 {

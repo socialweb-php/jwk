@@ -73,11 +73,11 @@ final class MemberReader
      * PHP's parser keeps the lexically last of two members with one name,
      * which is one of the two behaviors RFC 7517 section 4 allows.
      *
-     * JSON text is decoded with its objects kept apart from its arrays, so
-     * `{}` and `[]` are different values. An array that was already decoded
-     * cannot tell them apart, so an empty array is read as an empty object,
-     * an empty list, or an empty list of objects, whichever the caller asks
-     * for.
+     * JSON text is decoded with each object as a `stdClass` and each array
+     * as a PHP array, so `{}` and `[]` are different values. In an array
+     * that was already decoded, both are an empty PHP array, so an empty
+     * array is read as an empty object, an empty list, or an empty list of
+     * objects, whichever the caller asks for.
      *
      * @param string | array<array-key, mixed> $json
      *
@@ -318,7 +318,8 @@ final class MemberReader
 
     /**
      * Returns whether the value is a JSON object, or, when the value was not
-     * decoded from text, an array that could stand for one
+     * decoded from text, an array that a decoded JSON object could be: an
+     * empty array or one whose keys are not a list
      *
      * @phpstan-assert-if-true array<array-key, mixed> | stdClass $value
      */

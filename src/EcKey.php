@@ -25,6 +25,7 @@ namespace SocialWeb\Jwk;
 
 use OpenSSLAsymmetricKey;
 use SensitiveParameter;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
@@ -60,6 +61,8 @@ final readonly class EcKey extends Jwk
      *     than the curve fixes; with `PointNotOnCurve` when `x` and `y` are
      *     not a point on the curve; with `KeyPairMismatch` when `d` does not
      *     derive the point; or as the common members' rules say
+     * @throws InvalidArgument when an additional member is named after a member
+     *     the key type defines
      */
     public function __construct(
         public Curve $curve,

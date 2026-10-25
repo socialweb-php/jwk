@@ -25,6 +25,7 @@ namespace SocialWeb\Jwk;
 
 use OpenSSLAsymmetricKey;
 use SensitiveParameter;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
@@ -58,6 +59,8 @@ final readonly class OkpKey extends Jwk
      *     `WrongLength` for a key of another length than the curve fixes;
      *     with `KeyPairMismatch` when `d` does not derive `x`; or as the
      *     common members' rules say
+     * @throws InvalidArgument when an additional member is named after a member
+     *     the key type defines
      */
     public function __construct(
         public Curve $curve,

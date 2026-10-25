@@ -30,7 +30,7 @@ use RuntimeException;
  * JWK Set
  *
  * RFC 7517 section 4.5 lets equivalent keys of different types share a
- * `kid`; a lookup that also names the key type tells them apart.
+ * `kid`; a lookup that also names the key type finds only one of them.
  */
 final class AmbiguousKeyId extends RuntimeException implements JwkException
 {
