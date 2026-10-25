@@ -128,18 +128,7 @@ final class JsonValue
             [$current, $depth] = $next;
             $target = &$next[2];
 
-            if ($current instanceof stdClass && $current::class === stdClass::class) {
-                self::checkDepth($depth, $member);
-                $object = new stdClass();
-                $target = $object;
-
-                /** @var mixed $entry */
-                foreach (get_object_vars($current) as $name => $entry) {
-                    self::checkName((string) $name, $member);
-                    $object->{$name} = null;
-                    $pending[] = [$entry, $depth + 1, &$object->{$name}];
-                }
-            } elseif (is_array($current) && array_is_list($current)) {
+            if (is_array($current) && array_is_list($current)) {
                 self::checkDepth($depth, $member);
                 $target = [];
 
@@ -148,13 +137,13 @@ final class JsonValue
                     $target[$index] = null;
                     $pending[] = [$entry, $depth + 1, &$target[$index]];
                 }
-            } elseif (is_array($current)) {
+            } elseif (is_array($current) || ($current instanceof stdClass && $current::class === stdClass::class)) {
                 self::checkDepth($depth, $member);
                 $object = new stdClass();
                 $target = $object;
 
                 /** @var mixed $entry */
-                foreach ($current as $name => $entry) {
+                foreach (is_array($current) ? $current : get_object_vars($current) as $name => $entry) {
                     self::checkName((string) $name, $member);
                     $object->{$name} = null;
                     $pending[] = [$entry, $depth + 1, &$object->{$name}];

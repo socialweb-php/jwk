@@ -49,6 +49,26 @@ class JsonValueTest extends TestCase
         );
     }
 
+    public function testReadsKeyedArraysNestedToTheDepthPhpAllows(): void
+    {
+        $value = ['a' => 1];
+
+        for ($level = 1; $level < 510; $level++) {
+            $value = ['a' => $value];
+        }
+
+        $copy = JsonValue::read('m', $value);
+        $this->assertInstanceOf(stdClass::class, $copy);
+
+        try {
+            JsonValue::read('m', ['a' => $value]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+            $this->assertSame('m', $exception->member);
+        }
+    }
+
     public function testReadsAMemberNestedToTheDepthPhpAllows(): void
     {
         $value = [];
