@@ -30,6 +30,7 @@ use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
+use stdClass;
 
 use function array_is_list;
 use function array_unique;
@@ -118,20 +119,25 @@ abstract readonly class Jwk implements JsonSerializable
     }
 
     /**
-     * Parses a JWK from JSON text or from an array the text was already
+     * Parses a JWK from JSON text or from a value the text was already
      * decoded into, and returns the key class for its `kty`
+     *
+     * A decoded value is an array or a tree of `stdClass` objects, as
+     * `json_decode()` gives either. In an array, a PHP array that is a
+     * list, including an empty array, is a JSON array, and any other PHP
+     * array is a JSON object.
      *
      * With `$publicOnly`, a key with a private member is refused with the
      * reason `PrivateMembersPresent`, and an `oct` key with `SymmetricKey`,
      * since a symmetric key is never public.
      *
-     * @param string | array<array-key, mixed> $json
+     * @param string | array<array-key, mixed> | stdClass $json
      *
      * @throws InvalidJwk when the input is not a well-formed JWK of a type
      *     the package implements; the reason says which rule it broke
      */
     public static function fromJson(
-        #[SensitiveParameter] string | array $json,
+        #[SensitiveParameter] string | array | stdClass $json,
         bool $publicOnly = false,
     ): RsaKey | EcKey | OkpKey | OctKey {
         $members = MemberReader::fromJson($json);

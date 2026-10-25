@@ -64,8 +64,8 @@ final class MemberReader
     }
 
     /**
-     * Reads a JSON object from JSON text or from an array that JSON text was
-     * already decoded into
+     * Reads a JSON object from JSON text or from a value that JSON text was
+     * already decoded into, as an array or as a tree of `stdClass` objects
      *
      * PHP's parser keeps the lexically last of two members with one name,
      * which is one of the two behaviors RFC 7517 section 4 allows.
@@ -74,19 +74,21 @@ final class MemberReader
      * JSON object as a `stdClass` and each JSON array as a PHP list, so
      * `{}` and `[]` are different values. In a decoded array, a PHP array
      * that is a list, including an empty array, is a JSON array, and any
-     * other PHP array is a JSON object.
+     * other PHP array is a JSON object. A decoded value may nest objects and
+     * arrays only as deep as `json_decode()` reads JSON text.
      *
-     * @param string | array<array-key, mixed> $json
+     * @param string | array<array-key, mixed> | stdClass $json
      *
-     * @throws InvalidJwk with `MalformedJson` when the text does not parse,
-     *     or with `NotAnObject` when the value is not a JSON object
+     * @throws InvalidJwk with `MalformedJson` when the text does not parse
+     *     or the value nests too deep, or with `NotAnObject` when the value
+     *     is not a JSON object
      */
-    public static function fromJson(#[SensitiveParameter] string | array $json): self
+    public static function fromJson(#[SensitiveParameter] string | array | stdClass $json): self
     {
         if (is_string($json)) {
             try {
                 /** @var mixed $json */
-                $json = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
+                $json = json_decode($json, false, flags: JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
                 throw new InvalidJwk(
                     InvalidJwkReason::MalformedJson,

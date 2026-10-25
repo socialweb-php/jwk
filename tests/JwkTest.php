@@ -66,6 +66,59 @@ class JwkTest extends TestCase
         $this->assertEquals(Jwk::fromJson($text)->jsonSerialize(), Jwk::fromJson($array)->jsonSerialize());
     }
 
+    public function testFromJsonTakesATreeOfStdClassObjects(): void
+    {
+        $fixtures = [
+            'rfc7517/section-3.json',
+            'rfc7520/section-3.4.json',
+            'rfc7520/section-3.5.json',
+            'rfc8037/appendix-a1.json',
+            'generated/rsa-three-primes.json',
+        ];
+
+        foreach ($fixtures as $file) {
+            $text = self::fixtureJson($file);
+            $tree = json_decode($text, false, 512, JSON_THROW_ON_ERROR);
+            $this->assertInstanceOf(stdClass::class, $tree);
+
+            $this->assertSame(Jwk::fromJson($text)->toJson(), Jwk::fromJson($tree)->toJson(), $file);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function emptyObjectInATreeProvider(): iterable
+    {
+        yield 'key_ops as {}' => ['{"kty":"oct","k":"AQAB","key_ops":{}}', 'key_ops'];
+        yield 'x5c as {}' => ['{"kty":"oct","k":"AQAB","x5c":{}}', 'x5c'];
+        yield 'an oth entry as []' => ['{"kty":"RSA","n":"AQ","e":"AQ","oth":[[]]}', 'oth'];
+    }
+
+    #[DataProvider('emptyObjectInATreeProvider')]
+    public function testAnEmptyObjectAndAnEmptyArrayInATreeAreDifferentValues(string $json, string $member): void
+    {
+        $tree = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
+        $this->assertInstanceOf(stdClass::class, $tree);
+
+        try {
+            Jwk::fromJson($tree);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->assertSame($member, $exception->member);
+        }
+
+        $accepted = json_decode(
+            '{"kty":"oct","k":"AQAB","key_ops":[],"x5c":[],"ext":{}}',
+            false,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+        $this->assertInstanceOf(stdClass::class, $accepted);
+        $this->assertSame('{"kty":"oct","k":"AQAB","ext":{}}', Jwk::fromJson($accepted)->toJson());
+    }
+
     /**
      * @return iterable<string, array{string | array<array-key, mixed>, InvalidJwkReason, ?string}>
      */

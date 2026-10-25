@@ -11,6 +11,7 @@ use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\MemberReader;
 use stdClass;
 
+use function json_decode;
 use function json_encode;
 use function sprintf;
 use function str_contains;
@@ -36,9 +37,38 @@ class MemberReaderTest extends TestCase
         $this->assertSame("\x01\x00\x01", $reader->requiredBytes('k'));
     }
 
+    public function testReadsAnObjectFromATreeOfStdClassObjects(): void
+    {
+        $reader = MemberReader::fromJson(json_decode('{"kty":"oct","k":"AQAB","oth":[{"r":"AQ"}],"o":{"a":{}}}'));
+
+        $this->assertSame('oct', $reader->requiredString('kty'));
+        $this->assertSame("\x01\x00\x01", $reader->requiredBytes('k'));
+        $this->assertSame("\x01", $reader->objectList('oth')[0]->bytes('r'));
+        $this->assertSame('{"o":{"a":{}}}', json_encode($reader->except(['kty', 'k', 'oth'])));
+    }
+
+    public function testAStdClassWithNumericMemberNamesIsAnObject(): void
+    {
+        $reader = MemberReader::fromJson(json_decode('{"0":"a","1":"b"}'));
+
+        $this->assertSame('a', $reader->string('0'));
+        $this->assertSame('b', $reader->string('1'));
+    }
+
+    public function testDoesNotShareAStdClassWithTheCaller(): void
+    {
+        $object = new stdClass();
+        $object->a = 1;
+        $reader = MemberReader::fromJson(['kty' => 'oct', 'o' => $object]);
+        $object->a = 2;
+
+        $this->assertSame('{"o":{"a":1}}', json_encode($reader->except(['kty'])));
+    }
+
     public function testAnEmptyObjectHasNoMembers(): void
     {
         $this->assertFalse(MemberReader::fromJson('{}')->has('kty'));
+        $this->assertFalse(MemberReader::fromJson(new stdClass())->has('kty'));
     }
 
     public function testKeepsTheLexicallyLastOfTwoMembersWithOneName(): void
@@ -87,6 +117,38 @@ class MemberReaderTest extends TestCase
                 $exception->getMessage(),
             );
         }
+    }
+
+    public function testReadsADecodedArrayNestedToTheDepthPhpAllowsAndRefusesOneDeeper(): void
+    {
+        $nested = static function (int $depth): array {
+            $value = [];
+
+            for ($level = 1; $level < $depth; $level++) {
+                $value = [$value];
+            }
+
+            return ['kty' => 'oct', 'deep' => $value];
+        };
+
+        $this->assertTrue(MemberReader::fromJson($nested(510))->has('deep'));
+        $this->assertDepthIsRefused($nested(511));
+    }
+
+    public function testReadsAStdClassTreeNestedToTheDepthPhpAllowsAndRefusesOneDeeper(): void
+    {
+        $nested = static function (int $depth): stdClass {
+            $value = new stdClass();
+
+            for ($level = 1; $level < $depth; $level++) {
+                $value = (object) ['a' => $value];
+            }
+
+            return (object) ['kty' => 'oct', 'deep' => $value];
+        };
+
+        $this->assertTrue(MemberReader::fromJson($nested(510))->has('deep'));
+        $this->assertDepthIsRefused($nested(511));
     }
 
     public function testRefusesJsonTextWithContentAfterTheObject(): void
@@ -387,6 +449,24 @@ class MemberReaderTest extends TestCase
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
             $this->assertSame('The "key_ops" member must be an array', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @param array<array-key, mixed> | stdClass $json
+     */
+    private function assertDepthIsRefused(array | stdClass $json): void
+    {
+        try {
+            MemberReader::fromJson($json);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+            $this->assertNull($exception->member);
+            $this->assertSame(
+                'The JSON text does not parse: Maximum stack depth exceeded',
+                $exception->getMessage(),
+            );
         }
     }
 }
