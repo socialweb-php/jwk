@@ -129,6 +129,11 @@ final readonly class OkpKey extends Jwk
         return $this->openSslKey;
     }
 
+    protected function publicOpenSslKey(): OpenSSLAsymmetricKey
+    {
+        return $this->publicOpenSslKey;
+    }
+
     /**
      * @internal
      */

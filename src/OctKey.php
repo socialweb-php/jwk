@@ -102,6 +102,11 @@ final readonly class OctKey extends Jwk
         throw new ConversionFailed(ConversionFailedReason::SymmetricKey, 'A symmetric key has no OpenSSL form');
     }
 
+    protected function publicOpenSslKey(): ?OpenSSLAsymmetricKey
+    {
+        return null;
+    }
+
     /**
      * @internal
      */

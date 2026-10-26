@@ -205,4 +205,32 @@ class OctKeyTest extends TestCase
 
         (new OctKey("\x01"))->withAdditionalMember('k', 'x');
     }
+
+    public function testHasNoPemForm(): void
+    {
+        $key = Jwk::fromJson(self::fixture('rfc7520/section-3.5.json'));
+        $messages = [
+            'toPem' => 'A symmetric key has no PEM form',
+            'toPrivatePem' => 'A symmetric key has no OpenSSL form',
+        ];
+
+        foreach ($messages as $method => $message) {
+            try {
+                $key->{$method}();
+                $this->fail('Expected ConversionFailed');
+            } catch (ConversionFailed $exception) {
+                $this->assertSame(ConversionFailedReason::SymmetricKey, $exception->reason);
+                $this->assertSame($message, $exception->getMessage());
+            }
+        }
+    }
+
+    public function testToPrivatePemChecksThePassphraseFirst(): void
+    {
+        $key = Jwk::fromJson(self::fixture('rfc7520/section-3.5.json'));
+
+        $this->expectException(InvalidArgument::class);
+
+        $key->toPrivatePem('');
+    }
 }

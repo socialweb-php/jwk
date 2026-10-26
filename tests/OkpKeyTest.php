@@ -7,20 +7,29 @@ namespace SocialWeb\Test\Jwk;
 use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\Curve;
+use SocialWeb\Jwk\Exception\ConversionFailed;
+use SocialWeb\Jwk\Exception\ConversionFailedReason;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\Jwk;
 use SocialWeb\Jwk\KeyType;
 use SocialWeb\Jwk\OkpKey;
 
+use function array_diff_key;
 use function array_keys;
 use function openssl_error_string;
 use function openssl_pkey_get_details;
+use function openssl_pkey_new;
 use function openssl_verify;
 use function print_r;
 use function str_repeat;
 use function strlen;
 use function substr;
+
+use const OPENSSL_KEYTYPE_ED25519;
+use const OPENSSL_KEYTYPE_ED448;
+use const OPENSSL_KEYTYPE_X25519;
+use const OPENSSL_KEYTYPE_X448;
 
 class OkpKeyTest extends TestCase
 {
@@ -325,5 +334,132 @@ class OkpKeyTest extends TestCase
         );
         $this->assertStringNotContainsString('nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A', print_r($key, true));
         $this->assertEquals($key->toPublic()->jsonSerialize(), $key->toPublic()->__debugInfo());
+    }
+
+    /**
+     * @return iterable<string, array{Curve, int}>
+     */
+    public static function generatedCurveProvider(): iterable
+    {
+        yield 'Ed25519' => [Curve::Ed25519, OPENSSL_KEYTYPE_ED25519];
+        yield 'Ed448' => [Curve::Ed448, OPENSSL_KEYTYPE_ED448];
+        yield 'X25519' => [Curve::X25519, OPENSSL_KEYTYPE_X25519];
+        yield 'X448' => [Curve::X448, OPENSSL_KEYTYPE_X448];
+    }
+
+    #[DataProvider('generatedCurveProvider')]
+    public function testRoundTripsAGeneratedKeyThroughPemAndJwk(Curve $curve, int $keyType): void
+    {
+        $generated = openssl_pkey_new(['private_key_type' => $keyType]);
+        $this->assertNotFalse($generated);
+        $privatePem = self::exportPrivatePem($generated);
+        $publicPem = self::exportPublicPem($generated);
+
+        $private = Jwk::fromPem($privatePem);
+        $public = Jwk::fromPem($publicPem);
+
+        $this->assertInstanceOf(OkpKey::class, $private);
+        $this->assertInstanceOf(OkpKey::class, $public);
+        $this->assertSame($curve, $private->curve);
+        $this->assertSame($curve, $public->curve);
+        $this->assertTrue($private->isPrivate());
+        $this->assertFalse($public->isPrivate());
+        $this->assertSame($privatePem, $private->toPrivatePem());
+        $this->assertSame($publicPem, $private->toPem());
+        $this->assertSame($publicPem, $public->toPem());
+        $this->assertEquals($public->jsonSerialize(), $private->toPublic()->jsonSerialize());
+        $this->assertEquals($private->jsonSerialize(), Jwk::fromPem($private->toPrivatePem())->jsonSerialize());
+        $this->assertSame($private->thumbprint(), $public->thumbprint());
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testReadsTheRfc8410Section10Ed25519Keys(): void
+    {
+        $public = Jwk::fromPem(self::fixturePem('rfc8410/section-10.1-public.pem'));
+        $private = Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private.pem'));
+        $privateWithPublic = Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private-with-public-key.pem'));
+
+        $this->assertInstanceOf(OkpKey::class, $public);
+        $this->assertInstanceOf(OkpKey::class, $private);
+        $this->assertSame(Curve::Ed25519, $private->curve);
+        $this->assertSame(
+            self::hex('d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842'),
+            $private->privateKey,
+        );
+        $this->assertSame(
+            self::hex('19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1'),
+            $private->publicKey,
+        );
+        $this->assertSame($private->publicKey, $public->publicKey);
+        $this->assertFalse($public->isPrivate());
+        $this->assertEquals($private->jsonSerialize(), $privateWithPublic->jsonSerialize());
+    }
+
+    public function testWritesTheRfc8410Section10PemsBack(): void
+    {
+        $private = Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private.pem'));
+
+        $this->assertSame(self::fixturePem('rfc8410/section-10.1-public.pem'), $private->toPem());
+        $this->assertSame(self::fixturePem('rfc8410/section-10.3-private.pem'), $private->toPrivatePem());
+        $this->assertSame(
+            self::fixturePem('rfc8410/section-10.3-private.pem'),
+            Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private-with-public-key.pem'))->toPrivatePem(),
+        );
+    }
+
+    public function testAPrivatePemOfAnRfc8032VectorYieldsItsPublicKey(): void
+    {
+        $key = new OkpKey(Curve::Ed25519, self::hex(self::ED25519_TEST1_PUBLIC), self::hex(self::ED25519_TEST1_SECRET));
+
+        $read = Jwk::fromPem($key->toPrivatePem());
+
+        $this->assertInstanceOf(OkpKey::class, $read);
+        $this->assertSame(self::hex(self::ED25519_TEST1_PUBLIC), $read->publicKey);
+        $this->assertSame(self::hex(self::ED25519_TEST1_SECRET), $read->privateKey);
+        $this->assertSame(self::RFC8037_THUMBPRINT, $read->thumbprint());
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function pemRoundTripFixtureProvider(): iterable
+    {
+        yield 'RFC 8037 appendix A.1, Ed25519 private' => ['rfc8037/appendix-a1.json', true];
+        yield 'RFC 8037 appendix A.2, Ed25519 public' => ['rfc8037/appendix-a2.json', false];
+        yield 'RFC 8037 appendix A.6, X25519 public' => ['rfc8037/appendix-a6-bob.json', false];
+        yield 'RFC 8037 appendix A.7, X448 public' => ['rfc8037/appendix-a7-dave.json', false];
+    }
+
+    #[DataProvider('pemRoundTripFixtureProvider')]
+    public function testRoundTripsAFixtureThroughPem(string $file, bool $private): void
+    {
+        $fixture = self::fixture($file);
+        $key = Jwk::fromJson($fixture);
+
+        $readPublic = Jwk::fromPem($key->toPem());
+
+        $this->assertEquals(array_diff_key($fixture, ['kid' => 1, 'd' => 1]), $readPublic->jsonSerialize());
+        $this->assertSame($key->thumbprint(), $readPublic->thumbprint());
+
+        if (!$private) {
+            return;
+        }
+
+        $read = Jwk::fromPem($key->toPrivatePem());
+
+        $this->assertEquals(array_diff_key($fixture, ['kid' => 1]), $read->jsonSerialize());
+        $this->assertSame($key->thumbprint(), $read->thumbprint());
+    }
+
+    public function testAPublicKeyHasNoPrivatePem(): void
+    {
+        $key = Jwk::fromJson(self::fixture('rfc8037/appendix-a2.json'));
+
+        try {
+            $key->toPrivatePem();
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::NotAPrivateKey, $exception->reason);
+        }
     }
 }

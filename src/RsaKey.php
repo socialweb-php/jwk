@@ -176,14 +176,48 @@ final readonly class RsaKey extends Jwk
 
     public function toOpenSslKey(): OpenSSLAsymmetricKey
     {
-        if ($this->otherPrimesInfo !== []) {
+        $this->refuseMultiPrime();
+
+        return $this->openSslKey;
+    }
+
+    /**
+     * Returns the public key as a SubjectPublicKeyInfo PEM
+     *
+     * @throws ConversionFailed with `MultiPrimeKey` for a key with more than
+     *     two primes, which RFC 7518 section 6.3.2.7 tells a consumer that
+     *     does not support them not to use
+     */
+    public function toPem(): string
+    {
+        $this->refuseMultiPrime();
+
+        return parent::toPem();
+    }
+
+    /**
+     * Returns the private key as a PKCS #8 PEM
+     *
+     * @throws ConversionFailed with `MissingCrtMembers` for a private key
+     *     whose private members are `d` alone, which OpenSSL signs with and
+     *     does not export, because PKCS #8 holds the primes; otherwise as
+     *     the base class says
+     */
+    public function toPrivatePem(#[SensitiveParameter] ?string $passphrase = null): string
+    {
+        if ($this->privateExponent !== null && $this->firstPrimeFactor === null) {
             throw new ConversionFailed(
-                ConversionFailedReason::MultiPrimeKey,
-                'An RSA key with more than two primes cannot be built by OpenSSL',
+                ConversionFailedReason::MissingCrtMembers,
+                'An RSA private key with "d" alone has no PKCS #8 form, which holds the primes',
             );
         }
 
-        return $this->openSslKey;
+        return parent::toPrivatePem($passphrase);
+    }
+
+    protected function publicOpenSslKey(): OpenSSLAsymmetricKey
+    {
+        return $this->publicOpenSslKey;
     }
 
     /**
@@ -435,6 +469,19 @@ final readonly class RsaKey extends Jwk
                 InvalidJwkReason::KeyPairMismatch,
                 'The prime factors are too long to multiply to the "n" member',
                 'p',
+            );
+        }
+    }
+
+    /**
+     * @throws ConversionFailed with `MultiPrimeKey`
+     */
+    private function refuseMultiPrime(): void
+    {
+        if ($this->otherPrimesInfo !== []) {
+            throw new ConversionFailed(
+                ConversionFailedReason::MultiPrimeKey,
+                'An RSA key with more than two primes cannot be built by OpenSSL',
             );
         }
     }

@@ -27,6 +27,8 @@ use JsonSerializable;
 use LogicException;
 use OpenSSLAsymmetricKey;
 use SensitiveParameter;
+use SocialWeb\Jwk\Exception\ConversionFailed;
+use SocialWeb\Jwk\Exception\ConversionFailedReason;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
@@ -170,6 +172,49 @@ abstract readonly class Jwk implements JsonSerializable
     }
 
     /**
+     * Reads a key from PEM text, private when the text holds a private key
+     *
+     * Every form OpenSSL writes is read: a PKCS #8 private key, encrypted
+     * or not, a PKCS #1 `RSA PRIVATE KEY`, a SEC 1 `EC PRIVATE KEY`, a
+     * SubjectPublicKeyInfo `PUBLIC KEY`, a PKCS #1 `RSA PUBLIC KEY`, and a
+     * certificate, whose public key is read. The key has no common member;
+     * the `with` methods add them. A passphrase given for a key that is not
+     * encrypted is ignored.
+     *
+     * @throws InvalidArgument when the text starts with `file://`, which
+     *     OpenSSL would read as the path of a local file
+     * @throws ConversionFailed with `UnreadablePem` when OpenSSL reads no key
+     *     from the text, including an encrypted key given without its
+     *     passphrase; or with `UnsupportedKey` as `fromOpenSslKey()` does
+     * @throws InvalidJwk as `fromOpenSslKey()` does
+     */
+    public static function fromPem(
+        #[SensitiveParameter] string $pem,
+        #[SensitiveParameter] ?string $passphrase = null,
+    ): RsaKey | EcKey | OkpKey {
+        return self::fromOpenSslKey(OpenSsl::readPem($pem, $passphrase));
+    }
+
+    /**
+     * Reads a key OpenSSL holds, private when the key is private
+     *
+     * The members come from `openssl_pkey_get_details()`, and the key
+     * object is built from them as a parsed key is, so every rule of a
+     * parsed key applies. The key has no common member.
+     *
+     * @throws ConversionFailed with `UnsupportedKey` for a key type the
+     *     package does not implement, such as DSA, DH, or an RSA key with
+     *     the id-RSASSA-PSS algorithm identifier, whose members OpenSSL does
+     *     not report; or for an EC curve the package does not implement
+     * @throws InvalidJwk when the key breaks a rule a parsed key must keep,
+     *     such as an RSA public exponent of 1
+     */
+    public static function fromOpenSslKey(#[SensitiveParameter] OpenSSLAsymmetricKey $key): RsaKey | EcKey | OkpKey
+    {
+        return OpenSslKeyReader::read($key);
+    }
+
+    /**
      * Returns the key type, the `kty` member
      */
     abstract public function keyType(): KeyType;
@@ -200,6 +245,51 @@ abstract readonly class Jwk implements JsonSerializable
      *     primes, which OpenSSL's PHP binding does not build
      */
     abstract public function toOpenSslKey(): OpenSSLAsymmetricKey;
+
+    /**
+     * Returns the public key as a SubjectPublicKeyInfo PEM, whatever the key
+     * holds
+     *
+     * The PEM is OpenSSL's, in the strict form of RFC 7468 section 3.
+     *
+     * @throws ConversionFailed with `SymmetricKey` for an `oct` key, which
+     *     has no PEM form, or with `MultiPrimeKey` for an RSA key with more
+     *     than two primes
+     */
+    public function toPem(): string
+    {
+        $key = $this->publicOpenSslKey() ?? throw new ConversionFailed(
+            ConversionFailedReason::SymmetricKey,
+            'A symmetric key has no PEM form',
+        );
+
+        return OpenSsl::publicPem($key);
+    }
+
+    /**
+     * Returns the private key as a PKCS #8 PEM, encrypted with AES-256-CBC
+     * when a passphrase is given
+     *
+     * @throws InvalidArgument for an empty passphrase, which would encrypt
+     *     the key with an empty password; `null` asks for no encryption
+     * @throws ConversionFailed with `SymmetricKey` for an `oct` key; with
+     *     `NotAPrivateKey` for a public key; with `MissingCrtMembers` for
+     *     an RSA key whose private members are `d` alone, which PKCS #8
+     *     cannot hold; or with `MultiPrimeKey` for an RSA key with more than
+     *     two primes
+     */
+    public function toPrivatePem(#[SensitiveParameter] ?string $passphrase = null): string
+    {
+        if ($passphrase === '') {
+            throw new InvalidArgument('The passphrase must not be empty; pass null for an unencrypted PEM');
+        }
+
+        if (!$this->isPrivate()) {
+            throw new ConversionFailed(ConversionFailedReason::NotAPrivateKey, 'A public key has no private PEM form');
+        }
+
+        return OpenSsl::privatePem($this->toOpenSslKey(), $passphrase);
+    }
 
     /**
      * Returns the RFC 7638 thumbprint of the key: the required members of
@@ -485,6 +575,12 @@ abstract readonly class Jwk implements JsonSerializable
      * @return non-empty-list<string>
      */
     abstract protected function keyMemberNames(): array;
+
+    /**
+     * Returns the public key as OpenSSL holds it, or `null` for an `oct`
+     * key, which has none
+     */
+    abstract protected function publicOpenSslKey(): ?OpenSSLAsymmetricKey;
 
     /**
      * Returns the curve of an `EC` or `OKP` key, or `null`

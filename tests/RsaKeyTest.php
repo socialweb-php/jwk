@@ -15,11 +15,14 @@ use SocialWeb\Jwk\Jwk;
 use SocialWeb\Jwk\KeyType;
 use SocialWeb\Jwk\OtherPrimeInfo;
 use SocialWeb\Jwk\RsaKey;
+use SocialWeb\Jwk\RsaPublicKeyInfo;
 
+use function array_diff_key;
 use function array_keys;
 use function openssl_error_string;
 use function openssl_pkey_get_details;
 use function openssl_pkey_get_public;
+use function openssl_pkey_new;
 use function openssl_verify;
 use function print_r;
 use function str_repeat;
@@ -714,5 +717,98 @@ class RsaKeyTest extends TestCase
         }
 
         return $array;
+    }
+
+    public function testRoundTripsAGeneratedKeyThroughPemAndJwk(): void
+    {
+        $generated = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => 2048]);
+        $this->assertNotFalse($generated);
+        $privatePem = self::exportPrivatePem($generated);
+        $publicPem = self::exportPublicPem($generated);
+
+        $private = Jwk::fromPem($privatePem);
+        $public = Jwk::fromPem($publicPem);
+
+        $this->assertInstanceOf(RsaKey::class, $private);
+        $this->assertInstanceOf(RsaKey::class, $public);
+        $this->assertTrue($private->isPrivate());
+        $this->assertFalse($public->isPrivate());
+        $this->assertNotNull($private->firstCrtCoefficient);
+        $this->assertSame($privatePem, $private->toPrivatePem());
+        $this->assertSame($publicPem, $private->toPem());
+        $this->assertSame($publicPem, $public->toPem());
+        $this->assertEquals($public->jsonSerialize(), $private->toPublic()->jsonSerialize());
+        $this->assertEquals($private->jsonSerialize(), Jwk::fromPem($private->toPrivatePem())->jsonSerialize());
+        $this->assertEquals($public->jsonSerialize(), Jwk::fromPem($public->toPem())->jsonSerialize());
+        $this->assertSame($private->thumbprint(), $public->thumbprint());
+        $this->assertSame($private->thumbprint(), Jwk::fromPem($private->toPrivatePem())->thumbprint());
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testRoundTripsTheRfc7517AppendixA2PrivateKeyThroughPem(): void
+    {
+        $fixture = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $key = Jwk::fromJson($fixture);
+
+        $read = Jwk::fromPem($key->toPrivatePem());
+
+        $this->assertEquals(array_diff_key($fixture, ['alg' => 1, 'kid' => 1]), $read->jsonSerialize());
+        $this->assertSame($key->thumbprint(), $read->thumbprint());
+        $this->assertSame($key->toPem(), $read->toPem());
+    }
+
+    public function testAKeyWithDAloneHasNoPrivatePem(): void
+    {
+        $fixture = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $key = Jwk::fromJson(['kty' => 'RSA', 'n' => $fixture['n'], 'e' => $fixture['e'], 'd' => $fixture['d']]);
+
+        $this->assertSame(Jwk::fromJson($fixture)->toPem(), $key->toPem());
+
+        try {
+            $key->toPrivatePem();
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::MissingCrtMembers, $exception->reason);
+            $this->assertSame(
+                'An RSA private key with "d" alone has no PKCS #8 form, which holds the primes',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testAKeyWithThreePrimesHasNoPemFormUntilItIsPublic(): void
+    {
+        $key = Jwk::fromJson(self::fixture('generated/rsa-three-primes.json'));
+
+        foreach (['toPem', 'toPrivatePem'] as $method) {
+            try {
+                $key->{$method}();
+                $this->fail('Expected ConversionFailed');
+            } catch (ConversionFailed $exception) {
+                $this->assertSame(ConversionFailedReason::MultiPrimeKey, $exception->reason);
+            }
+        }
+
+        $this->assertStringStartsWith("-----BEGIN PUBLIC KEY-----\n", $key->toPublic()->toPem());
+    }
+
+    public function testAPublicKeyHasNoPrivatePem(): void
+    {
+        $key = Jwk::fromJson(self::fixtureSetMember('rfc7517/appendix-a1.json', 1));
+
+        $this->expectException(ConversionFailed::class);
+        $this->expectExceptionMessageIsOrContains('A public key has no private PEM form');
+
+        $key->toPrivatePem();
+    }
+
+    public function testThePemIsTheHandBuiltSubjectPublicKeyInfo(): void
+    {
+        $key = Jwk::fromJson(self::fixtureSetMember('rfc7517/appendix-a1.json', 1));
+
+        $this->assertInstanceOf(RsaKey::class, $key);
+        $this->assertSame(RsaPublicKeyInfo::pem($key->modulus, $key->publicExponent), $key->toPem());
     }
 }

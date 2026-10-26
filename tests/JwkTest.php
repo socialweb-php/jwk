@@ -13,6 +13,8 @@ use ReflectionMethod;
 use SensitiveParameterValue;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\EcKey;
+use SocialWeb\Jwk\Exception\ConversionFailed;
+use SocialWeb\Jwk\Exception\ConversionFailedReason;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
@@ -26,6 +28,7 @@ use SocialWeb\Jwk\RsaKey;
 use Throwable;
 use stdClass;
 
+use function array_diff_key;
 use function array_keys;
 use function hash;
 use function ini_set;
@@ -34,6 +37,7 @@ use function is_object;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function openssl_error_string;
 use function serialize;
 use function sprintf;
 use function str_contains;
@@ -1006,6 +1010,225 @@ class JwkTest extends TestCase
             foreach ($value as $entry) {
                 self::collectStrings($entry, $strings, $depth + 1);
             }
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string, class-string<Jwk>, bool}>
+     */
+    public static function rfc9421PemProvider(): iterable
+    {
+        yield 'B.1.1 RSA PUBLIC KEY' => [
+            'rfc9421/test-key-rsa.public.pem',
+            'rfc9421/test-key-rsa.json',
+            RsaKey::class,
+            false,
+        ];
+        yield 'B.1.1 RSA PRIVATE KEY' => [
+            'rfc9421/test-key-rsa.private.pem',
+            'rfc9421/test-key-rsa.json',
+            RsaKey::class,
+            true,
+        ];
+        yield 'B.1.2 public key' => [
+            'rfc9421/test-key-rsa-pss.public.pem',
+            'rfc9421/test-key-rsa-pss.json',
+            RsaKey::class,
+            false,
+        ];
+        yield 'B.1.2 private key re-exported as rsaEncryption' => [
+            'rfc9421/test-key-rsa-pss.private.rsa.pem',
+            'rfc9421/test-key-rsa-pss.json',
+            RsaKey::class,
+            true,
+        ];
+        yield 'B.1.3 public key' => [
+            'rfc9421/test-key-ecc-p256.public.pem',
+            'rfc9421/test-key-ecc-p256.json',
+            EcKey::class,
+            false,
+        ];
+        yield 'B.1.3 EC PRIVATE KEY' => [
+            'rfc9421/test-key-ecc-p256.private.pem',
+            'rfc9421/test-key-ecc-p256.json',
+            EcKey::class,
+            true,
+        ];
+        yield 'B.1.4 public key' => [
+            'rfc9421/test-key-ed25519.public.pem',
+            'rfc9421/test-key-ed25519.json',
+            OkpKey::class,
+            false,
+        ];
+        yield 'B.1.4 private key' => [
+            'rfc9421/test-key-ed25519.private.pem',
+            'rfc9421/test-key-ed25519.json',
+            OkpKey::class,
+            true,
+        ];
+    }
+
+    /**
+     * @param class-string<Jwk> $class
+     */
+    #[DataProvider('rfc9421PemProvider')]
+    public function testFromPemReadsTheRfc9421KeysAsTheirJwkForms(
+        string $pem,
+        string $jwk,
+        string $class,
+        bool $private,
+    ): void {
+        $fixture = self::fixture($jwk);
+        $key = Jwk::fromPem(self::fixturePem($pem));
+
+        $expected = $private
+            ? $fixture
+            : array_diff_key($fixture, ['d' => 1, 'p' => 1, 'q' => 1, 'dp' => 1, 'dq' => 1, 'qi' => 1]);
+
+        $this->assertInstanceOf($class, $key);
+        $this->assertSame($private, $key->isPrivate());
+        $this->assertNull($key->keyId);
+        $this->assertNull($key->algorithm);
+        $this->assertNull($key->use);
+        $this->assertSame([], $key->keyOperations);
+        $this->assertSame([], $key->additionalMembers());
+        $this->assertEquals($expected, $key->withKeyId(self::fixtureString($fixture, 'kid'))->jsonSerialize());
+        $this->assertFalse(openssl_error_string());
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function rfc9421JwkProvider(): iterable
+    {
+        yield 'B.1.1' => [
+            'rfc9421/test-key-rsa.json',
+            'rfc9421/test-key-rsa.public.spki.pem',
+            'rfc9421/test-key-rsa.private.pkcs8.pem',
+        ];
+        yield 'B.1.2' => [
+            'rfc9421/test-key-rsa-pss.json',
+            'rfc9421/test-key-rsa-pss.public.pem',
+            'rfc9421/test-key-rsa-pss.private.rsa.pem',
+        ];
+        yield 'B.1.3' => [
+            'rfc9421/test-key-ecc-p256.json',
+            'rfc9421/test-key-ecc-p256.public.pem',
+            'rfc9421/test-key-ecc-p256.private.pkcs8.pem',
+        ];
+        yield 'B.1.4' => [
+            'rfc9421/test-key-ed25519.json',
+            'rfc9421/test-key-ed25519.public.pem',
+            'rfc9421/test-key-ed25519.private.pem',
+        ];
+    }
+
+    #[DataProvider('rfc9421JwkProvider')]
+    public function testWritesTheRfc9421JwksAsThePemsOpenSslWrites(
+        string $jwk,
+        string $publicPem,
+        string $privatePem,
+    ): void {
+        $key = Jwk::fromJson(self::fixture($jwk));
+
+        $this->assertSame(self::fixturePem($publicPem), $key->toPem());
+        $this->assertSame(self::fixturePem($publicPem), $key->toPublic()->toPem());
+        $this->assertSame(self::fixturePem($privatePem), $key->toPrivatePem());
+        $this->assertSame($key->thumbprint(), Jwk::fromPem($key->toPrivatePem())->thumbprint());
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testRefusesTheRfc9421RsaPssPrivateKeyAsUnsupported(): void
+    {
+        try {
+            Jwk::fromPem(self::fixturePem('rfc9421/test-key-rsa-pss.private.pem'));
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::UnsupportedKey, $exception->reason);
+            $this->assertStringContainsString('id-RSASSA-PSS', $exception->getMessage());
+        }
+    }
+
+    public function testFromOpenSslKeyReadsTheKeyToOpenSslKeyReturns(): void
+    {
+        $keys = [
+            Jwk::fromJson(self::fixtureSetMember('rfc7517/appendix-a2.json', 1)),
+            Jwk::fromJson(self::fixture('rfc8037/appendix-a1.json')),
+        ];
+
+        foreach ($keys as $key) {
+            $read = Jwk::fromOpenSslKey($key->toOpenSslKey());
+
+            $this->assertSame($key::class, $read::class);
+            $this->assertTrue($read->isPrivate());
+            $this->assertSame($key->thumbprint(), $read->thumbprint());
+            $this->assertSame($key->toPem(), $read->toPem());
+            $this->assertEquals($key->withKeyId(null)->withAlgorithm(null)->jsonSerialize(), $read->jsonSerialize());
+        }
+    }
+
+    public function testFromPemGivesAnEncryptedKeyBackWithItsPassphrase(): void
+    {
+        $key = Jwk::fromJson(self::fixture('rfc9421/test-key-ecc-p256.json'));
+        $encrypted = $key->toPrivatePem('correct horse battery staple');
+
+        $this->assertStringStartsWith("-----BEGIN ENCRYPTED PRIVATE KEY-----\n", $encrypted);
+        $this->assertEquals(
+            $key->withKeyId(null)->jsonSerialize(),
+            Jwk::fromPem($encrypted, 'correct horse battery staple')->jsonSerialize(),
+        );
+
+        try {
+            Jwk::fromPem($encrypted);
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testFromPemRefusesAFilePath(): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A key must be given as PEM text, not as a file path');
+
+        Jwk::fromPem('file:///etc/ssl/private/key.pem');
+    }
+
+    public function testFromPemRefusesTextOpenSslCannotRead(): void
+    {
+        try {
+            Jwk::fromPem("-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n");
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+            $this->assertStringContainsString('error:', $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testToPrivatePemRefusesAnEmptyPassphrase(): void
+    {
+        $key = Jwk::fromJson(self::fixture('rfc9421/test-key-ed25519.json'));
+
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('The passphrase must not be empty; pass null for an unencrypted PEM');
+
+        $key->toPrivatePem('');
+    }
+
+    public function testToPrivatePemRefusesAPublicKey(): void
+    {
+        $key = Jwk::fromPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'));
+
+        try {
+            $key->toPrivatePem();
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::NotAPrivateKey, $exception->reason);
+            $this->assertSame('A public key has no private PEM form', $exception->getMessage());
         }
     }
 }

@@ -137,6 +137,11 @@ final readonly class EcKey extends Jwk
         return $this->openSslKey;
     }
 
+    protected function publicOpenSslKey(): OpenSSLAsymmetricKey
+    {
+        return $this->publicOpenSslKey;
+    }
+
     /**
      * @internal
      */
