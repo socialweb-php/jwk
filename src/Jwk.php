@@ -425,8 +425,9 @@ abstract readonly class Jwk implements JsonSerializable
      * @param list<string> $certificateChain
      *
      * @throws InvalidJwk with `WrongType` when the chain is not a list of
-     *     strings, or with `InvalidValue` for a string that is not valid
-     *     UTF-8
+     *     strings, with `InvalidValue` for a string that is not valid
+     *     UTF-8, or with `InvalidCertificate`, `CertificateKeyMismatch`, or
+     *     `CertificateThumbprintMismatch` as the certificate members require
      */
     public function withCertificateChain(array $certificateChain): static
     {
@@ -437,7 +438,8 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `x5t` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `InvalidValue` for a string that is not valid
-     *     UTF-8
+     *     UTF-8, or with `InvalidCertificate`, `CertificateKeyMismatch`, or
+     *     `CertificateThumbprintMismatch` as the certificate members require
      */
     public function withCertificateSha1Thumbprint(?string $thumbprint): static
     {
@@ -449,7 +451,8 @@ abstract readonly class Jwk implements JsonSerializable
      * `null`
      *
      * @throws InvalidJwk with `InvalidValue` for a string that is not valid
-     *     UTF-8
+     *     UTF-8, or with `InvalidCertificate`, `CertificateKeyMismatch`, or
+     *     `CertificateThumbprintMismatch` as the certificate members require
      */
     public function withCertificateSha256Thumbprint(?string $thumbprint): static
     {
@@ -782,6 +785,13 @@ abstract readonly class Jwk implements JsonSerializable
      * `x5c` entry decodes, the first holds this key, and `x5t` and
      * `x5t#S256`, when present beside `x5c`, are its digests
      *
+     * The key of the certificate is compared with this key by RFC 7638
+     * thumbprint, so a certificate that writes an EC point in a different
+     * form, such as the compressed form of RFC 5480 section 2.2, still
+     * holds the key. A certificate key the package cannot read, such as an
+     * RSA key with the id-RSASSA-PSS algorithm identifier, is a different
+     * key.
+     *
      * Without `x5c`, the thumbprints are kept as received, since the
      * certificate they describe is not at hand.
      *
@@ -806,13 +816,21 @@ abstract readonly class Jwk implements JsonSerializable
             'The first entry of the "x5c" member is not a DER certificate OpenSSL reads',
             'x5c',
         );
-        $publicKey = $this->publicOpenSslKey() ?? throw new InvalidJwk(
-            InvalidJwkReason::CertificateKeyMismatch,
-            'The "x5c" member holds a certificate, and a symmetric key has no public key for one to hold',
-            'x5c',
-        );
+        if ($this->publicOpenSslKey() === null) {
+            throw new InvalidJwk(
+                InvalidJwkReason::CertificateKeyMismatch,
+                'The "x5c" member holds a certificate, and a symmetric key has no public key for one to hold',
+                'x5c',
+            );
+        }
 
-        if (OpenSsl::publicPem($certificateKey) !== OpenSsl::publicPem($publicKey)) {
+        try {
+            $certificateThumbprint = self::fromOpenSslKey($certificateKey)->thumbprint();
+        } catch (ConversionFailed | InvalidJwk) {
+            $certificateThumbprint = null;
+        }
+
+        if ($certificateThumbprint === null || !hash_equals($this->thumbprint(), $certificateThumbprint)) {
             throw new InvalidJwk(
                 InvalidJwkReason::CertificateKeyMismatch,
                 'The first certificate of the "x5c" member holds a different key',

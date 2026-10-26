@@ -1500,6 +1500,67 @@ class JwkTest extends TestCase
         }
     }
 
+    public function testAcceptsACertificateHoldingTheKeyWithACompressedPoint(): void
+    {
+        $pem = self::fixturePem('generated/ec-p256-compressed-certificate.pem');
+        $entry = (string) preg_replace('/-----[^-]+-----|\s/', '', $pem);
+        $key = Jwk::fromPem($pem);
+        $this->assertInstanceOf(EcKey::class, $key);
+
+        $withChain = $key->withCertificateChain([$entry]);
+
+        $this->assertSame([$entry], $withChain->certificateChain);
+
+        $another = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        $this->assertNotFalse($another);
+
+        try {
+            Jwk::fromOpenSslKey($another)->toPublic()->withCertificateChain([$entry]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateKeyMismatch, $exception->reason);
+            $this->assertSame(
+                'The first certificate of the "x5c" member holds a different key',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testRefusesACertificateHoldingAnRsaPssKeyForTheSameModulusAndExponent(): void
+    {
+        $entry = (string) preg_replace(
+            '/-----[^-]+-----|\s/',
+            '',
+            self::fixturePem('generated/rsa-pss-certificate.pem'),
+        );
+        $key = new RsaKey(
+            modulus: Base64Url::decode(
+                'umqTEFaOgvLIPpEiTMbjJVud0us2r3dxb2HbaswXcVVEwzRFJkj0eE3dpRIxma_t'
+                . 'NbsZLDocIBHfgNDobHvlB1EnjIrvdtFkEc9TjQ3cQupizaX1tlGjrBu4jPxEQ4Mo'
+                . 'JzTIDsaovKBG_Lu2gbwkWHlXgswE9axEhzw0Hp-ECIT3HniEZuqhSFnbcKL-kTgq'
+                . 'hlcqxhmwsWxxuUCnwEXQdwdHH32AGPKSGFHqTiWoBRaWXlgdgknzqru8rWToCeys'
+                . 'XbhX04KhsUD3qOj_JhzU0T05-7Qs-rCUkmbj32_WSlnRnV8sIEoVE9KfVen900_c'
+                . 'xNnWd3bRfDZYrxF9GiakMQ',
+            ),
+            publicExponent: Base64Url::decode('AQAB'),
+        );
+
+        try {
+            $key->withCertificateChain([$entry]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateKeyMismatch, $exception->reason);
+            $this->assertSame(
+                'The first certificate of the "x5c" member holds a different key',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
     private static function appendixBCertificate(): string
     {
         /** @var list<string> $chain */
