@@ -1459,6 +1459,31 @@ class JwkTest extends TestCase
         $this->assertFalse(openssl_error_string());
     }
 
+    public function testRefusesAFirstCertificateWithBytesAfterIt(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        /** @var list<string> $chain */
+        $chain = $fixture['x5c'];
+        $der = base64_decode($chain[0], true);
+        $this->assertIsString($der);
+        $chain[0] = base64_encode($der . 'extra');
+
+        try {
+            Jwk::fromJson([...$fixture, 'x5c' => $chain]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidCertificate, $exception->reason);
+            $this->assertSame('x5c', $exception->member);
+            $this->assertSame(
+                'The first entry of the "x5c" member is not a DER certificate OpenSSL reads: '
+                    . 'there are bytes after the certificate',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
     public function testDecodesAndDoesNotExamineTheLaterEntriesOfTheChain(): void
     {
         $fixture = self::fixture('rfc7517/appendix-b.json');

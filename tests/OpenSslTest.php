@@ -680,6 +680,25 @@ class OpenSslTest extends TestCase
         $this->assertFalse(openssl_error_string());
     }
 
+    public function testRefusesACertificateWithBytesAfterIt(): void
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $der = base64_decode($chain[0], true);
+        $this->assertIsString($der);
+
+        try {
+            OpenSsl::certificatePublicKey($der . "\x00\x01\x02", 'Not a certificate', 'x5c');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidCertificate, $exception->reason);
+            $this->assertSame('x5c', $exception->member);
+            $this->assertSame('Not a certificate: there are bytes after the certificate', $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
     public function testRefusesBytesThatAreNotACertificate(): void
     {
         @openssl_pkey_get_public('not a key');

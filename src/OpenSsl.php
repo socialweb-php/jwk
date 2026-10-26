@@ -34,6 +34,7 @@ use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 use function array_key_first;
 use function array_keys;
+use function base64_decode;
 use function base64_encode;
 use function chunk_split;
 use function count;
@@ -49,10 +50,12 @@ use function openssl_pkey_get_details;
 use function openssl_pkey_get_private;
 use function openssl_pkey_get_public;
 use function openssl_pkey_new;
+use function openssl_x509_export;
 use function openssl_x509_read;
 use function preg_match;
 use function sprintf;
 use function str_pad;
+use function str_replace;
 use function str_starts_with;
 
 use const OPENSSL_CIPHER_AES_256_CBC;
@@ -239,14 +242,17 @@ final class OpenSsl
      * Returns the public key of a DER certificate
      *
      * `openssl_x509_read()` reads PEM text only, so the DER is wrapped as a
-     * `CERTIFICATE` PEM per RFC 7468 section 5 first.
+     * `CERTIFICATE` PEM per RFC 7468 section 5 first. OpenSSL reads the
+     * first certificate in the bytes and ignores any bytes after it, so the
+     * DER OpenSSL writes for the certificate must be the bytes given.
      *
      * @param string $message The message of the refusal, to which OpenSSL's
      *     error text is appended when there is any
      * @param string $member The member the refusal names
      *
      * @throws InvalidJwk with `InvalidCertificate` when the bytes are not a
-     *     certificate OpenSSL reads, or hold a public key it cannot read
+     *     certificate OpenSSL reads, hold a public key it cannot read, or
+     *     have bytes after the certificate
      */
     public static function certificatePublicKey(string $der, string $message, string $member): OpenSSLAsymmetricKey
     {
@@ -260,6 +266,18 @@ final class OpenSsl
 
         if ($key === false) {
             throw self::refusal(InvalidJwkReason::InvalidCertificate, $message, $member);
+        }
+
+        $written = '';
+        openssl_x509_export($pem, $written);
+        $boundaries = ['-----BEGIN CERTIFICATE-----', '-----END CERTIFICATE-----'];
+
+        if (!is_string($written) || base64_decode(str_replace($boundaries, '', $written)) !== $der) {
+            throw self::refusal(
+                InvalidJwkReason::InvalidCertificate,
+                $message . ': there are bytes after the certificate',
+                $member,
+            );
         }
 
         return $key;
