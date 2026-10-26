@@ -243,8 +243,9 @@ final class OpenSsl
      *
      * `openssl_x509_read()` reads PEM text only, so the DER is wrapped as a
      * `CERTIFICATE` PEM per RFC 7468 section 5 first. OpenSSL reads the
-     * first certificate in the bytes and ignores any bytes after it, so the
-     * DER OpenSSL writes for the certificate must be the bytes given.
+     * first certificate in the bytes, ignores any bytes after it, and
+     * accepts lengths that DER does not allow, so the DER OpenSSL writes for
+     * the certificate must be the bytes given.
      *
      * @param string $message The message of the refusal, to which OpenSSL's
      *     error text is appended when there is any
@@ -252,7 +253,7 @@ final class OpenSsl
      *
      * @throws InvalidJwk with `InvalidCertificate` when the bytes are not a
      *     certificate OpenSSL reads, hold a public key it cannot read, or
-     *     have bytes after the certificate
+     *     are not exactly the DER encoding of the certificate
      */
     public static function certificatePublicKey(string $der, string $message, string $member): OpenSSLAsymmetricKey
     {
@@ -275,7 +276,7 @@ final class OpenSsl
         if (!is_string($written) || base64_decode(str_replace($boundaries, '', $written)) !== $der) {
             throw self::refusal(
                 InvalidJwkReason::InvalidCertificate,
-                $message . ': there are bytes after the certificate',
+                $message . ': the bytes are not exactly the DER encoding of the certificate',
                 $member,
             );
         }

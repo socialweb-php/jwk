@@ -1476,7 +1476,7 @@ class JwkTest extends TestCase
             $this->assertSame('x5c', $exception->member);
             $this->assertSame(
                 'The first entry of the "x5c" member is not a DER certificate OpenSSL reads: '
-                    . 'there are bytes after the certificate',
+                    . 'the bytes are not exactly the DER encoding of the certificate',
                 $exception->getMessage(),
             );
         }

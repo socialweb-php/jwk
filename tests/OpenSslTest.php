@@ -29,6 +29,7 @@ use function str_ends_with;
 use function str_repeat;
 use function str_replace;
 use function strlen;
+use function substr;
 
 use const OPENSSL_KEYTYPE_EC;
 use const OPENSSL_KEYTYPE_ED25519;
@@ -693,7 +694,33 @@ class OpenSslTest extends TestCase
         } catch (InvalidJwk $exception) {
             $this->assertSame(InvalidJwkReason::InvalidCertificate, $exception->reason);
             $this->assertSame('x5c', $exception->member);
-            $this->assertSame('Not a certificate: there are bytes after the certificate', $exception->getMessage());
+            $this->assertSame(
+                'Not a certificate: the bytes are not exactly the DER encoding of the certificate',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testRefusesACertificateWhoseLengthIsNotInItsDerForm(): void
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $der = base64_decode($chain[0], true);
+        $this->assertIsString($der);
+        $this->assertSame("\x30\x82", substr($der, 0, 2));
+
+        try {
+            OpenSsl::certificatePublicKey("\x30\x83\x00" . substr($der, 2), 'Not a certificate', 'x5c');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidCertificate, $exception->reason);
+            $this->assertSame('x5c', $exception->member);
+            $this->assertSame(
+                'Not a certificate: the bytes are not exactly the DER encoding of the certificate',
+                $exception->getMessage(),
+            );
         }
 
         $this->assertFalse(openssl_error_string());
