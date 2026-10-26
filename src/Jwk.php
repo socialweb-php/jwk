@@ -194,7 +194,9 @@ abstract readonly class Jwk implements JsonSerializable
      *     OpenSSL would read as the path of a local file
      * @throws ConversionFailed with `UnreadablePem` when OpenSSL reads no key
      *     from the text, including an encrypted key given without its
-     *     passphrase; or with `UnsupportedKey` as `fromOpenSslKey()` does
+     *     passphrase or with a wrong one, even when the text also holds a
+     *     certificate or a public key; or with `UnsupportedKey` as
+     *     `fromOpenSslKey()` does
      * @throws InvalidJwk as `fromOpenSslKey()` does
      */
     public static function fromPem(

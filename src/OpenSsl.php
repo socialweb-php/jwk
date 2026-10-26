@@ -50,6 +50,7 @@ use function openssl_pkey_get_private;
 use function openssl_pkey_get_public;
 use function openssl_pkey_new;
 use function openssl_x509_read;
+use function preg_match;
 use function sprintf;
 use function str_pad;
 use function str_starts_with;
@@ -191,6 +192,12 @@ final class OpenSsl
      * and a certificate, whose public key is returned. A passphrase given
      * for a key that is not encrypted is ignored, as OpenSSL ignores it.
      *
+     * Text with a private key boundary, such as `-----BEGIN PRIVATE KEY-----`
+     * or `-----BEGIN ENCRYPTED PRIVATE KEY-----`, is not given to
+     * `openssl_pkey_get_public()` when the private key does not read, so a
+     * certificate beside an encrypted key whose passphrase is wrong or
+     * missing does not stand in for that key.
+     *
      * OpenSSL is always handed a passphrase string, an empty one for `null`,
      * because with none it asks for one on the terminal when there is one.
      *
@@ -198,7 +205,8 @@ final class OpenSsl
      *     OpenSSL would read as the path of a local file
      * @throws ConversionFailed with `UnreadablePem` when OpenSSL reads no key
      *     from the text, which includes an encrypted key given without its
-     *     passphrase or with a wrong one
+     *     passphrase or with a wrong one, even when the text also holds a
+     *     certificate or a public key
      */
     public static function readPem(
         #[SensitiveParameter] string $pem,
@@ -211,7 +219,7 @@ final class OpenSsl
         self::drainErrors();
         $key = openssl_pkey_get_private($pem, $passphrase ?? '');
 
-        if ($key === false) {
+        if ($key === false && preg_match('/-----BEGIN (?:[A-Z0-9]+[ -])*PRIVATE KEY-----/', $pem) !== 1) {
             $key = openssl_pkey_get_public($pem);
         }
 

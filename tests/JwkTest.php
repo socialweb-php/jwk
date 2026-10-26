@@ -36,6 +36,7 @@ use function array_diff_key;
 use function array_keys;
 use function base64_decode;
 use function base64_encode;
+use function chunk_split;
 use function hash;
 use function ini_set;
 use function is_array;
@@ -1199,6 +1200,46 @@ class JwkTest extends TestCase
         }
 
         $this->assertFalse(openssl_error_string());
+    }
+
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function bundleOrderProvider(): iterable
+    {
+        yield 'the certificate first' => [true];
+        yield 'the key first' => [false];
+    }
+
+    #[DataProvider('bundleOrderProvider')]
+    public function testFromPemRefusesAnEncryptedKeyBesideACertificateWithoutItsPassphrase(
+        bool $certificateFirst,
+    ): void {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $certificate = "-----BEGIN CERTIFICATE-----\n"
+            . chunk_split($chain[0], 64, "\n")
+            . "-----END CERTIFICATE-----\n";
+        $key = Jwk::fromJson(self::fixture('rfc9421/test-key-ecc-p256.json'));
+        $encrypted = $key->toPrivatePem('secret');
+        $bundle = $certificateFirst ? $certificate . $encrypted : $encrypted . $certificate;
+
+        $read = Jwk::fromPem($bundle, 'secret');
+        $this->assertTrue($read->isPrivate());
+        $this->assertEquals($key->withKeyId(null)->jsonSerialize(), $read->jsonSerialize());
+        $this->assertFalse(openssl_error_string());
+
+        foreach ([null, 'wrong', ''] as $passphrase) {
+            try {
+                Jwk::fromPem($bundle, $passphrase);
+                $this->fail('Expected ConversionFailed');
+            } catch (ConversionFailed $exception) {
+                $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+                $this->assertStringContainsString('bad decrypt', $exception->getMessage());
+            }
+
+            $this->assertFalse(openssl_error_string());
+        }
     }
 
     public function testFromPemRefusesAFilePath(): void

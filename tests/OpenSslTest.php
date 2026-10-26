@@ -437,6 +437,79 @@ class OpenSslTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function bundleOrderProvider(): iterable
+    {
+        yield 'the certificate first' => [true];
+        yield 'the key first' => [false];
+    }
+
+    #[DataProvider('bundleOrderProvider')]
+    public function testRefusesAnEncryptedKeyBesideACertificateWithoutItsPassphrase(bool $certificateFirst): void
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $certificate = "-----BEGIN CERTIFICATE-----\n"
+            . chunk_split($chain[0], 64, "\n")
+            . "-----END CERTIFICATE-----\n";
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ecc-p256.private.pem'), null);
+        $encrypted = OpenSsl::privatePem($key, 'secret');
+        $bundle = $certificateFirst ? $certificate . $encrypted : $encrypted . $certificate;
+
+        $read = OpenSsl::readPem($bundle, 'secret');
+        $this->assertSame(OpenSsl::privatePem($key, null), OpenSsl::privatePem($read, null));
+        $this->assertFalse(openssl_error_string());
+
+        foreach ([null, 'wrong', ''] as $passphrase) {
+            try {
+                OpenSsl::readPem($bundle, $passphrase);
+                $this->fail('Expected ConversionFailed');
+            } catch (ConversionFailed $exception) {
+                $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+                $this->assertStringStartsWith(
+                    'OpenSSL could not read a key from the PEM text: error:',
+                    $exception->getMessage(),
+                );
+                $this->assertStringContainsString('bad decrypt', $exception->getMessage());
+            }
+
+            $this->assertFalse(openssl_error_string());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function privateKeyLabelProvider(): iterable
+    {
+        yield 'PKCS #8' => ['PRIVATE KEY'];
+        yield 'PKCS #8 encrypted' => ['ENCRYPTED PRIVATE KEY'];
+        yield 'PKCS #1' => ['RSA PRIVATE KEY'];
+        yield 'SEC 1' => ['EC PRIVATE KEY'];
+    }
+
+    #[DataProvider('privateKeyLabelProvider')]
+    public function testDoesNotReadTheCertificateBesideAPrivateKeyThatDoesNotRead(string $label): void
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $certificate = "-----BEGIN CERTIFICATE-----\n"
+            . chunk_split($chain[0], 64, "\n")
+            . "-----END CERTIFICATE-----\n";
+        $bundle = $certificate . "-----BEGIN {$label}-----\nAAAA\n-----END {$label}-----\n";
+
+        try {
+            OpenSsl::readPem($bundle, null);
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
     public function testIgnoresAPassphraseGivenForAnUnencryptedPem(): void
     {
         $pem = self::fixturePem('rfc9421/test-key-ed25519.private.pem');
