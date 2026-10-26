@@ -36,13 +36,16 @@ use stdClass;
 
 use function array_is_list;
 use function array_unique;
+use function base64_decode;
 use function count;
 use function hash;
+use function hash_equals;
 use function in_array;
 use function is_string;
 use function json_encode;
 use function sprintf;
 use function strlen;
+use function strspn;
 
 use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
@@ -71,6 +74,12 @@ abstract readonly class Jwk implements JsonSerializable
      * package writes them
      */
     private const array COMMON_MEMBER_NAMES = ['kty', 'use', 'key_ops', 'alg', 'kid', 'x5u', 'x5c', 'x5t', 'x5t#S256'];
+
+    /**
+     * The alphabet of standard base64 with padding, RFC 4648 section 4,
+     * which the `x5c` entries use
+     */
+    private const string BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 
     /**
      * Every member the package does not define, in the order received,
@@ -762,6 +771,111 @@ abstract readonly class Jwk implements JsonSerializable
                 InvalidJwkReason::AlgorithmDoesNotFitKey,
                 sprintf('The algorithm "%s" does not fit %s', $this->algorithm, $this->describeType()),
                 'alg',
+            );
+        }
+
+        $this->checkCertificateMembers();
+    }
+
+    /**
+     * Applies RFC 7517 sections 4.7 to 4.9 to the certificate members: every
+     * `x5c` entry decodes, the first holds this key, and `x5t` and
+     * `x5t#S256`, when present beside `x5c`, are its digests
+     *
+     * Without `x5c`, the thumbprints are kept as received, since the
+     * certificate they describe is not at hand.
+     *
+     * @throws InvalidJwk with `InvalidCertificate`, `CertificateKeyMismatch`,
+     *     or `CertificateThumbprintMismatch`
+     */
+    private function checkCertificateMembers(): void
+    {
+        if ($this->certificateChain === []) {
+            return;
+        }
+
+        $certificates = [];
+
+        foreach ($this->certificateChain as $index => $entry) {
+            $certificates[] = self::decodeCertificate($index + 1, $entry);
+        }
+
+        $der = $certificates[0];
+        $certificateKey = OpenSsl::certificatePublicKey(
+            $der,
+            'The first entry of the "x5c" member is not a DER certificate OpenSSL reads',
+            'x5c',
+        );
+        $publicKey = $this->publicOpenSslKey() ?? throw new InvalidJwk(
+            InvalidJwkReason::CertificateKeyMismatch,
+            'The "x5c" member holds a certificate, and a symmetric key has no public key for one to hold',
+            'x5c',
+        );
+
+        if (OpenSsl::publicPem($certificateKey) !== OpenSsl::publicPem($publicKey)) {
+            throw new InvalidJwk(
+                InvalidJwkReason::CertificateKeyMismatch,
+                'The first certificate of the "x5c" member holds a different key',
+                'x5c',
+            );
+        }
+
+        self::checkCertificateThumbprint('x5t', $this->certificateSha1Thumbprint, 'sha1', 'SHA-1', $der);
+        self::checkCertificateThumbprint('x5t#S256', $this->certificateSha256Thumbprint, 'sha256', 'SHA-256', $der);
+    }
+
+    /**
+     * Returns the DER an `x5c` entry encodes
+     *
+     * RFC 7517 section 4.7 encodes each entry in the base64 of RFC 4648
+     * section 4: the standard alphabet, padded to a multiple of four
+     * characters, with no line breaks.
+     *
+     * @param int $position The entry's position, counted from 1, for the
+     *     message
+     *
+     * @throws InvalidJwk with `InvalidCertificate`
+     */
+    private static function decodeCertificate(int $position, string $entry): string
+    {
+        $der = strspn($entry, self::BASE64_ALPHABET) === strlen($entry) && strlen($entry) % 4 === 0
+            ? base64_decode($entry, true)
+            : false;
+
+        if ($der === false || $der === '') {
+            throw new InvalidJwk(
+                InvalidJwkReason::InvalidCertificate,
+                sprintf('Entry %d of the "x5c" member is not a certificate in standard base64 with padding', $position),
+                'x5c',
+            );
+        }
+
+        return $der;
+    }
+
+    /**
+     * @param string $algorithm The name `hash()` knows the digest by
+     * @param string $digestName The digest as the message names it
+     * @param string $der The first certificate of `x5c`
+     *
+     * @throws InvalidJwk with `CertificateThumbprintMismatch`
+     */
+    private static function checkCertificateThumbprint(
+        string $member,
+        ?string $thumbprint,
+        string $algorithm,
+        string $digestName,
+        string $der,
+    ): void {
+        if ($thumbprint !== null && !hash_equals(Base64Url::encode(hash($algorithm, $der, true)), $thumbprint)) {
+            throw new InvalidJwk(
+                InvalidJwkReason::CertificateThumbprintMismatch,
+                sprintf(
+                    'The "%s" member is not the %s digest of the first certificate of the "x5c" member',
+                    $member,
+                    $digestName,
+                ),
+                $member,
             );
         }
     }

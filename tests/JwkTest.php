@@ -7,9 +7,12 @@ namespace SocialWeb\Test\Jwk;
 use Closure;
 use DateTimeImmutable;
 use LogicException;
+use OpenSSLAsymmetricKey;
+use OpenSSLCertificateSigningRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
 use ReflectionMethod;
+use RuntimeException;
 use SensitiveParameterValue;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\EcKey;
@@ -24,12 +27,14 @@ use SocialWeb\Jwk\KeyOperation;
 use SocialWeb\Jwk\KeyUse;
 use SocialWeb\Jwk\OctKey;
 use SocialWeb\Jwk\OkpKey;
+use SocialWeb\Jwk\OpenSsl;
 use SocialWeb\Jwk\RsaKey;
 use Throwable;
 use stdClass;
 
 use function array_diff_key;
 use function array_keys;
+use function base64_decode;
 use function hash;
 use function ini_set;
 use function is_array;
@@ -37,18 +42,28 @@ use function is_object;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function openssl_csr_new;
+use function openssl_csr_sign;
 use function openssl_error_string;
+use function openssl_pkey_new;
+use function openssl_x509_export;
+use function preg_replace;
+use function rtrim;
 use function serialize;
 use function sprintf;
 use function str_contains;
 use function str_repeat;
 use function strlen;
+use function strtr;
+use function substr;
 use function unserialize;
 
 use const INF;
 use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 use const NAN;
+use const OPENSSL_KEYTYPE_EC;
+use const OPENSSL_KEYTYPE_ED25519;
 
 class JwkTest extends TestCase
 {
@@ -336,7 +351,6 @@ class JwkTest extends TestCase
             'alg' => 'Custom-Alg',
             'kid' => 'a kid with spaces',
             'x5u' => 'https://example.com/certs',
-            'x5c' => ['MIID'],
             'x5t' => 'AQAB',
             'x5t#S256' => 'AQAB',
             'ext' => true,
@@ -347,7 +361,7 @@ class JwkTest extends TestCase
         $this->assertSame(['verify', 'custom-op'], $key->keyOperations);
         $this->assertSame('Custom-Alg', $key->algorithm);
         $this->assertSame('https://example.com/certs', $key->certificateUrl);
-        $this->assertSame(['MIID'], $key->certificateChain);
+        $this->assertSame([], $key->certificateChain);
         $this->assertSame('AQAB', $key->certificateSha1Thumbprint);
         $this->assertSame('AQAB', $key->certificateSha256Thumbprint);
         $this->assertEquals(['ext' => true, 'nested' => (object) ['a' => [1, 2, 3]]], $key->additionalMembers());
@@ -424,7 +438,6 @@ class JwkTest extends TestCase
             'x' => '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo',
             'alg' => 'Ed25519',
             'crv' => 'Ed25519',
-            'x5c' => ['MIID'],
             'key_ops' => ['verify'],
             'kty' => 'OKP',
             'x5u' => 'https://example.com/certs',
@@ -436,7 +449,7 @@ class JwkTest extends TestCase
         $this->assertSame(
             '{"kty":"OKP","crv":"Ed25519","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",'
             . '"use":"sig","key_ops":["verify"],"alg":"Ed25519","kid":"k1","x5u":"https://example.com/certs",'
-            . '"x5c":["MIID"],"x5t":"AAAA","x5t#S256":"BBBB","ext":true,"another":1}',
+            . '"x5t":"AAAA","x5t#S256":"BBBB","ext":true,"another":1}',
             $key->toJson(),
         );
     }
@@ -484,7 +497,6 @@ class JwkTest extends TestCase
             ->withUse(KeyUse::Signature)
             ->withKeyOperations([KeyOperation::Verify, 'custom-op'])
             ->withCertificateUrl('https://example.com/certs')
-            ->withCertificateChain(['MIID'])
             ->withCertificateSha1Thumbprint('AAAA')
             ->withCertificateSha256Thumbprint('BBBB')
             ->withAdditionalMember('ext', true);
@@ -494,7 +506,6 @@ class JwkTest extends TestCase
         $this->assertSame('sig', $changed->use);
         $this->assertSame(['verify', 'custom-op'], $changed->keyOperations);
         $this->assertSame('https://example.com/certs', $changed->certificateUrl);
-        $this->assertSame(['MIID'], $changed->certificateChain);
         $this->assertSame('AAAA', $changed->certificateSha1Thumbprint);
         $this->assertSame('BBBB', $changed->certificateSha256Thumbprint);
         $this->assertSame(['ext' => true], $changed->additionalMembers());
@@ -675,10 +686,9 @@ class JwkTest extends TestCase
 
     public function testAConstructorAcceptsKeyOperationCasesAndStrings(): void
     {
-        $key = new OctKey("\x01", keyOperations: [KeyOperation::Sign, 'verify'], certificateChain: ['MIIB']);
+        $key = new OctKey("\x01", keyOperations: [KeyOperation::Sign, 'verify']);
 
         $this->assertSame(['sign', 'verify'], $key->keyOperations);
-        $this->assertSame(['MIIB'], $key->certificateChain);
     }
 
     /**
@@ -1230,5 +1240,276 @@ class JwkTest extends TestCase
             $this->assertSame(ConversionFailedReason::NotAPrivateKey, $exception->reason);
             $this->assertSame('A public key has no private PEM form', $exception->getMessage());
         }
+    }
+
+    public function testParsesTheRfc7517AppendixBKeyWhoseCertificateHoldsIt(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        $key = Jwk::fromJson($fixture);
+
+        $this->assertInstanceOf(RsaKey::class, $key);
+        $this->assertSame('1b94c', $key->keyId);
+        $this->assertSame('sig', $key->use);
+        $this->assertCount(1, $key->certificateChain);
+        $this->assertEquals($fixture, $key->jsonSerialize());
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testAcceptsTheThumbprintsOfTheFirstCertificate(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        $der = self::appendixBCertificate();
+
+        $key = Jwk::fromJson([
+            ...$fixture,
+            'x5t' => '4pNenEBLv0JpLIdugWxQkOsZcK0',
+            'x5t#S256' => Base64Url::encode(hash('sha256', $der, true)),
+        ]);
+
+        $this->assertSame('4pNenEBLv0JpLIdugWxQkOsZcK0', $key->certificateSha1Thumbprint);
+        $this->assertSame(Base64Url::encode(hash('sha1', $der, true)), $key->certificateSha1Thumbprint);
+        $this->assertSame(
+            ['kty', 'n', 'e', 'use', 'kid', 'x5c', 'x5t', 'x5t#S256'],
+            array_keys($key->jsonSerialize()),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function certificateMismatchProvider(): iterable
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $message = 'The first certificate of the "x5c" member holds a different key';
+
+        yield 'another RSA key' => [[...self::fixture('rfc7638/section-3.1.json'), 'x5c' => $chain], $message];
+        yield 'an EC key' => [[...self::fixture('rfc7517/section-3.json'), 'x5c' => $chain], $message];
+        yield 'an OKP key' => [[...self::fixture('rfc8037/appendix-a2.json'), 'x5c' => $chain], $message];
+        yield 'a symmetric key' => [
+            [...self::fixture('rfc7520/section-3.5.json'), 'x5c' => $chain],
+            'The "x5c" member holds a certificate, and a symmetric key has no public key for one to hold',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $jwk
+     */
+    #[DataProvider('certificateMismatchProvider')]
+    public function testRefusesACertificateThatHoldsAnotherKey(array $jwk, string $message): void
+    {
+        try {
+            Jwk::fromJson($jwk);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateKeyMismatch, $exception->reason);
+            $this->assertSame('x5c', $exception->member);
+            $this->assertSame($message, $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function certificateThumbprintMismatchProvider(): iterable
+    {
+        yield 'x5t' => [
+            'x5t',
+            'AAAA',
+            'The "x5t" member is not the SHA-1 digest of the first certificate of the "x5c" member',
+        ];
+        yield 'x5t#S256' => [
+            'x5t#S256',
+            'AAAA',
+            'The "x5t#S256" member is not the SHA-256 digest of the first certificate of the "x5c" member',
+        ];
+        yield 'x5t with padding' => [
+            'x5t',
+            '4pNenEBLv0JpLIdugWxQkOsZcK0=',
+            'The "x5t" member is not the SHA-1 digest of the first certificate of the "x5c" member',
+        ];
+    }
+
+    #[DataProvider('certificateThumbprintMismatchProvider')]
+    public function testRefusesAThumbprintThatIsNotTheCertificatesDigest(
+        string $member,
+        string $value,
+        string $message,
+    ): void {
+        try {
+            Jwk::fromJson([...self::fixture('rfc7517/appendix-b.json'), $member => $value]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateThumbprintMismatch, $exception->reason);
+            $this->assertSame($member, $exception->member);
+            $this->assertSame($message, $exception->getMessage());
+        }
+    }
+
+    public function testKeepsTheThumbprintsAsReceivedWithoutACertificateChain(): void
+    {
+        $key = Jwk::fromJson([
+            ...self::fixture('rfc7517/section-3.json'),
+            'x5t' => 'not-a-digest',
+            'x5t#S256' => 'AAAA',
+        ]);
+
+        $this->assertSame('not-a-digest', $key->certificateSha1Thumbprint);
+        $this->assertSame('AAAA', $key->certificateSha256Thumbprint);
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, non-empty-string}>
+     */
+    public static function invalidCertificateProvider(): iterable
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $certificate = $chain[0];
+        $message = 'Entry 1 of the "x5c" member is not a certificate in standard base64 with padding';
+
+        yield 'not a certificate' => [
+            ['MIID'],
+            'The first entry of the "x5c" member is not a DER certificate OpenSSL reads: error:',
+        ];
+        yield 'a PEM instead of base64' => [["-----BEGIN CERTIFICATE-----\n" . $certificate], $message];
+        yield 'base64url' => [[strtr($certificate, '+/', '-_')], $message];
+        yield 'a line break inside' => [[substr($certificate, 0, 64) . "\n" . substr($certificate, 64)], $message];
+        yield 'padding removed' => [[rtrim($certificate, '=')], $message];
+        yield 'padding in the middle' => [['AB=C' . substr($certificate, 4)], $message];
+        yield 'an empty entry' => [[''], $message];
+        yield 'a second entry that does not decode' => [
+            [$certificate, 'MII'],
+            'Entry 2 of the "x5c" member is not a certificate in standard base64 with padding',
+        ];
+    }
+
+    /**
+     * @param list<string> $chain
+     * @param non-empty-string $message
+     */
+    #[DataProvider('invalidCertificateProvider')]
+    public function testRefusesACertificateChainEntryThatDoesNotDecode(array $chain, string $message): void
+    {
+        try {
+            Jwk::fromJson([...self::fixture('rfc7517/appendix-b.json'), 'x5c' => $chain]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidCertificate, $exception->reason);
+            $this->assertSame('x5c', $exception->member);
+            $this->assertStringStartsWith($message, $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testDecodesAndDoesNotExamineTheLaterEntriesOfTheChain(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        /** @var list<string> $chain */
+        $chain = $fixture['x5c'];
+        $chain[] = 'AAAA';
+
+        $key = Jwk::fromJson([...$fixture, 'x5c' => $chain]);
+
+        $this->assertSame($chain, $key->certificateChain);
+    }
+
+    public function testTheWithMethodsApplyTheCertificateChecks(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        /** @var list<string> $chain */
+        $chain = $fixture['x5c'];
+        $key = Jwk::fromJson(array_diff_key($fixture, ['x5c' => 1]));
+        $this->assertSame([], $key->certificateChain);
+
+        $withChain = $key->withCertificateChain($chain);
+        $this->assertSame($chain, $withChain->certificateChain);
+        $this->assertSame(
+            '4pNenEBLv0JpLIdugWxQkOsZcK0',
+            $withChain->withCertificateSha1Thumbprint('4pNenEBLv0JpLIdugWxQkOsZcK0')->certificateSha1Thumbprint,
+        );
+
+        try {
+            $withChain->withCertificateSha1Thumbprint('AAAA');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateThumbprintMismatch, $exception->reason);
+        }
+
+        try {
+            Jwk::fromJson(self::fixture('rfc7638/section-3.1.json'))->withCertificateChain($chain);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateKeyMismatch, $exception->reason);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function certificateKeyTypeProvider(): iterable
+    {
+        yield 'EC' => [['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1'], 'sha256'];
+        // An Ed25519 signature hashes inside the algorithm, so the
+        // certificate is signed with no digest of its own.
+        yield 'Ed25519' => [['private_key_type' => OPENSSL_KEYTYPE_ED25519], 'null'];
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    #[DataProvider('certificateKeyTypeProvider')]
+    public function testAcceptsACertificateHoldingAnEcOrOkpKey(array $options, string $digest): void
+    {
+        $generated = openssl_pkey_new($options);
+        $this->assertNotFalse($generated);
+        // The key is passed by reference, since the function generates one
+        // when none is given, so it is checked again afterward.
+        $request = openssl_csr_new(['commonName' => 'socialweb/jwk test'], $generated, ['digest_alg' => $digest]);
+        $this->assertInstanceOf(OpenSSLCertificateSigningRequest::class, $request);
+        $this->assertInstanceOf(OpenSSLAsymmetricKey::class, $generated);
+        $certificate = openssl_csr_sign($request, null, $generated, 1, ['digest_alg' => $digest]);
+        $this->assertNotFalse($certificate);
+        $pem = '';
+        $this->assertTrue(openssl_x509_export($certificate, $pem));
+        $this->assertIsString($pem);
+        OpenSsl::drainErrors();
+
+        $entry = (string) preg_replace('/-----[^-]+-----|\s/', '', $pem);
+        $der = base64_decode($entry, true);
+        $this->assertIsString($der);
+        $digest = Base64Url::encode(hash('sha256', $der, true));
+
+        $key = Jwk::fromOpenSslKey($generated)->toPublic()->withCertificateChain([$entry]);
+
+        $this->assertSame([$entry], $key->certificateChain);
+        $this->assertSame($digest, $key->withCertificateSha256Thumbprint($digest)->certificateSha256Thumbprint);
+        $this->assertEquals($key->jsonSerialize(), Jwk::fromJson($key->toJson())->jsonSerialize());
+
+        $another = openssl_pkey_new($options);
+        $this->assertNotFalse($another);
+
+        try {
+            Jwk::fromOpenSslKey($another)->withCertificateChain([$entry]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateKeyMismatch, $exception->reason);
+        }
+    }
+
+    private static function appendixBCertificate(): string
+    {
+        /** @var list<string> $chain */
+        $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
+        $der = base64_decode($chain[0], true);
+
+        if (!is_string($der)) {
+            throw new RuntimeException('The appendix B certificate does not decode');
+        }
+
+        return $der;
     }
 }
