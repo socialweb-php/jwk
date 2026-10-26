@@ -1273,6 +1273,16 @@ class JwkTest extends TestCase
         $key->toPrivatePem('');
     }
 
+    public function testToPrivatePemRefusesAnEmptyPassphraseBeforeAPublicKey(): void
+    {
+        $key = Jwk::fromPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'));
+
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('The passphrase must not be empty; pass null for an unencrypted PEM');
+
+        $key->toPrivatePem('');
+    }
+
     public function testToPrivatePemRefusesAPublicKey(): void
     {
         $key = Jwk::fromPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'));

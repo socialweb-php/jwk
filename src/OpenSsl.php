@@ -293,11 +293,17 @@ final class OpenSsl
      * does not. The callers refuse what OpenSSL cannot export before
      * calling: a public key, and an RSA key without its primes.
      *
+     * @throws InvalidArgument for an empty passphrase, which OpenSSL would
+     *     use as an empty password; `null` asks for no encryption
      * @throws LogicException when OpenSSL does not export the key, with
      *     OpenSSL's error text when there is any
      */
     public static function privatePem(OpenSSLAsymmetricKey $key, #[SensitiveParameter] ?string $passphrase): string
     {
+        if ($passphrase === '') {
+            throw new InvalidArgument('The passphrase must not be empty; pass null for an unencrypted PEM');
+        }
+
         $options = $passphrase === null
             ? []
             : ['encrypt_key' => true, 'encrypt_key_cipher' => OPENSSL_CIPHER_AES_256_CBC];

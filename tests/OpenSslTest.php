@@ -619,6 +619,16 @@ class OpenSslTest extends TestCase
         $this->assertSame(OpenSsl::publicPem($key), OpenSsl::publicPem(OpenSsl::readPem($pem, 'secret')));
     }
 
+    public function testPrivatePemRefusesAnEmptyPassphrase(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.private.pem'), null);
+
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('The passphrase must not be empty; pass null for an unencrypted PEM');
+
+        OpenSsl::privatePem($key, '');
+    }
+
     public function testPrivatePemThrowsWhenOpenSslDoesNotExportTheKey(): void
     {
         $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'), null);
