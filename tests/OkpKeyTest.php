@@ -30,6 +30,7 @@ use const OPENSSL_KEYTYPE_ED25519;
 use const OPENSSL_KEYTYPE_ED448;
 use const OPENSSL_KEYTYPE_X25519;
 use const OPENSSL_KEYTYPE_X448;
+use const OPENSSL_VERSION_NUMBER;
 
 class OkpKeyTest extends TestCase
 {
@@ -377,7 +378,6 @@ class OkpKeyTest extends TestCase
     {
         $public = Jwk::fromPem(self::fixturePem('rfc8410/section-10.1-public.pem'));
         $private = Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private.pem'));
-        $privateWithPublic = Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private-with-public-key.pem'));
 
         $this->assertInstanceOf(OkpKey::class, $public);
         $this->assertInstanceOf(OkpKey::class, $private);
@@ -392,7 +392,6 @@ class OkpKeyTest extends TestCase
         );
         $this->assertSame($private->publicKey, $public->publicKey);
         $this->assertFalse($public->isPrivate());
-        $this->assertEquals($private->jsonSerialize(), $privateWithPublic->jsonSerialize());
     }
 
     public function testWritesTheRfc8410Section10PemsBack(): void
@@ -401,10 +400,36 @@ class OkpKeyTest extends TestCase
 
         $this->assertSame(self::fixturePem('rfc8410/section-10.1-public.pem'), $private->toPem());
         $this->assertSame(self::fixturePem('rfc8410/section-10.3-private.pem'), $private->toPrivatePem());
-        $this->assertSame(
-            self::fixturePem('rfc8410/section-10.3-private.pem'),
-            Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private-with-public-key.pem'))->toPrivatePem(),
+    }
+
+    public function testReadsTheRfc8410Section10PrivateKeyWithItsPublicKeyWhereOpenSslDoes(): void
+    {
+        $pem = self::fixturePem('rfc8410/section-10.3-private-with-public-key.pem');
+
+        // The key is a OneAsymmetricKey of version 2 (RFC 5958), which holds
+        // the public key after the attributes. OpenSSL reads that version
+        // from release 3.5.0, and an earlier release refuses it.
+        if (OPENSSL_VERSION_NUMBER < 0x30500000) {
+            try {
+                Jwk::fromPem($pem);
+                $this->fail('Expected ConversionFailed');
+            } catch (ConversionFailed $exception) {
+                $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+            }
+
+            $this->assertFalse(openssl_error_string());
+
+            return;
+        }
+
+        $key = Jwk::fromPem($pem);
+
+        $this->assertEquals(
+            Jwk::fromPem(self::fixturePem('rfc8410/section-10.3-private.pem'))->jsonSerialize(),
+            $key->jsonSerialize(),
         );
+        $this->assertSame(self::fixturePem('rfc8410/section-10.3-private.pem'), $key->toPrivatePem());
+        $this->assertFalse(openssl_error_string());
     }
 
     public function testAPrivatePemOfAnRfc8032VectorYieldsItsPublicKey(): void
