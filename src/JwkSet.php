@@ -44,6 +44,7 @@ use function count;
 use function get_object_vars;
 use function hash_equals;
 use function is_array;
+use function is_object;
 use function is_string;
 use function json_decode;
 use function json_encode;
@@ -157,7 +158,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
             }
         }
 
-        if (!$json instanceof stdClass && (!is_array($json) || array_is_list($json))) {
+        if (is_object($json) ? $json::class !== stdClass::class : (!is_array($json) || array_is_list($json))) {
             throw new InvalidJwkSet('The JSON value is not an object');
         }
 
@@ -311,7 +312,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
 
     /**
      * Returns the set without the key, which is the instance `keys()` or a
-     * lookup returned, or the same set when it holds no such instance
+     * lookup returned, or an equal set when it holds no such instance
      */
     public function withoutKey(Jwk $key): self
     {

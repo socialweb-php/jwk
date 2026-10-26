@@ -149,6 +149,13 @@ class JwkSetTest extends TestCase
         yield 'a JSON string' => ['"keys"', 'The JSON value is not an object'];
         yield 'a PHP list' => [[['kty' => 'oct', 'k' => 'AQ']], 'The JSON value is not an object'];
         yield 'an empty PHP array' => [[], 'The JSON value is not an object'];
+        yield 'a stdClass subclass' => [
+            new class extends stdClass {
+                /** @var array<never, never> */
+                public array $keys = [];
+            },
+            'The JSON value is not an object',
+        ];
         yield 'no keys member' => ['{"kty":"oct"}', 'The "keys" member is required'];
         yield 'keys as an object' => ['{"keys":{}}', 'The "keys" member must be an array'];
         yield 'keys as a string' => ['{"keys":"none"}', 'The "keys" member must be an array'];
