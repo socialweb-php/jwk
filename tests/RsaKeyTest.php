@@ -778,6 +778,21 @@ class RsaKeyTest extends TestCase
         $this->assertFalse(openssl_error_string());
     }
 
+    public function testAKeyWithDAloneIsMissingCrtMembersBeforeTheEmptyPassphraseIsRefused(): void
+    {
+        $fixture = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $key = Jwk::fromJson(['kty' => 'RSA', 'n' => $fixture['n'], 'e' => $fixture['e'], 'd' => $fixture['d']]);
+
+        try {
+            $key->toPrivatePem('');
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::MissingCrtMembers, $exception->reason);
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
     public function testAKeyWithThreePrimesHasNoPemFormUntilItIsPublic(): void
     {
         $key = Jwk::fromJson(self::fixture('generated/rsa-three-primes.json'));

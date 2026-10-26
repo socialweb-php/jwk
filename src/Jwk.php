@@ -818,6 +818,7 @@ abstract readonly class Jwk implements JsonSerializable
             'The first entry of the "x5c" member is not a DER certificate OpenSSL reads',
             'x5c',
         );
+
         if ($this->publicOpenSslKey() === null) {
             throw new InvalidJwk(
                 InvalidJwkReason::CertificateKeyMismatch,

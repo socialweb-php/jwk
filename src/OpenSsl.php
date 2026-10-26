@@ -173,7 +173,7 @@ final class OpenSsl
      *
      * @return array<string, mixed>
      */
-    public static function details(OpenSSLAsymmetricKey $key): array
+    public static function details(#[SensitiveParameter] OpenSSLAsymmetricKey $key): array
     {
         $details = openssl_pkey_get_details($key);
 
@@ -280,6 +280,8 @@ final class OpenSsl
             );
         }
 
+        self::drainErrors();
+
         return $key;
     }
 
@@ -290,7 +292,7 @@ final class OpenSsl
      *
      * A private key gives the PEM of its public key.
      */
-    public static function publicPem(OpenSSLAsymmetricKey $key): string
+    public static function publicPem(#[SensitiveParameter] OpenSSLAsymmetricKey $key): string
     {
         $pem = self::details($key)['key'] ?? null;
 
@@ -316,8 +318,10 @@ final class OpenSsl
      * @throws LogicException when OpenSSL does not export the key, with
      *     OpenSSL's error text when there is any
      */
-    public static function privatePem(OpenSSLAsymmetricKey $key, #[SensitiveParameter] ?string $passphrase): string
-    {
+    public static function privatePem(
+        #[SensitiveParameter] OpenSSLAsymmetricKey $key,
+        #[SensitiveParameter] ?string $passphrase,
+    ): string {
         if ($passphrase === '') {
             throw new InvalidArgument('The passphrase must not be empty; pass null for an unencrypted PEM');
         }
@@ -336,6 +340,8 @@ final class OpenSsl
                 'OpenSSL could not export the private key' . ($errors === '' ? '' : ': ' . $errors),
             );
         }
+
+        self::drainErrors();
 
         return $pem;
     }

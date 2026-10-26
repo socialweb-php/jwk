@@ -252,6 +252,25 @@ class JwkSetTest extends TestCase
         $this->assertSame('kty', $skipped[7]->cause->member);
     }
 
+    public function testSkipsAMemberOfTheWrongJsonTypeAndKeepsTheRest(): void
+    {
+        $ec = self::fixture('rfc7517/section-3.json');
+        $okp = self::fixture('rfc8037/appendix-a2.json');
+
+        $set = JwkSet::fromJson(['keys' => [$ec, [...$ec, 'kid' => 5], $okp]]);
+
+        $this->assertSame(
+            [EcKey::class, OkpKey::class],
+            array_map(static fn (Jwk $key): string => $key::class, $set->keys()),
+        );
+
+        $skipped = $set->skipped();
+        $this->assertCount(1, $skipped);
+        $this->assertSame(1, $skipped[0]->index);
+        $this->assertSame(InvalidJwkReason::WrongType, $skipped[0]->cause->reason);
+        $this->assertSame('kid', $skipped[0]->cause->member);
+    }
+
     public function testSkipsAPrivateKeyAndASymmetricKeyWhenOnlyPublicKeysAreAccepted(): void
     {
         $set = JwkSet::fromJson(self::fixtureJson('rfc7517/appendix-a2.json'), publicOnly: true);
