@@ -112,6 +112,22 @@ class TestCase extends BaseTestCase
     }
 
     /**
+     * Asserts that a refusal's message holds the error OpenSSL reports for
+     * an encrypted key read with a wrong passphrase
+     *
+     * OpenSSL reports `bad decrypt` when the bytes it decrypts with the
+     * wrong key end in padding that is not valid. About one wrong
+     * passphrase in 256 decrypts to bytes whose padding is valid by
+     * chance, and OpenSSL then reads them as ASN.1 and reports a decode
+     * error instead, so a test that reads a key it encrypted with a wrong
+     * passphrase accepts either.
+     */
+    protected static function assertMessageNamesAWrongPassphrase(string $message): void
+    {
+        self::assertMatchesRegularExpression('/bad decrypt|PKCS12 routines::decode error/', $message);
+    }
+
+    /**
      * Returns the private key as the PKCS #8 PEM `openssl_pkey_export()`
      * writes
      */

@@ -431,7 +431,7 @@ class OpenSslTest extends TestCase
                     'OpenSSL could not read a key from the PEM text: error:',
                     $exception->getMessage(),
                 );
-                $this->assertStringContainsString('bad decrypt', $exception->getMessage());
+                self::assertMessageNamesAWrongPassphrase($exception->getMessage());
             }
 
             $this->assertFalse(openssl_error_string());
@@ -473,7 +473,7 @@ class OpenSslTest extends TestCase
                     'OpenSSL could not read a key from the PEM text: error:',
                     $exception->getMessage(),
                 );
-                $this->assertStringContainsString('bad decrypt', $exception->getMessage());
+                self::assertMessageNamesAWrongPassphrase($exception->getMessage());
             }
 
             $this->assertFalse(openssl_error_string());

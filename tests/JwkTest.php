@@ -1235,7 +1235,11 @@ class JwkTest extends TestCase
                 $this->fail('Expected ConversionFailed');
             } catch (ConversionFailed $exception) {
                 $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
-                $this->assertStringContainsString('bad decrypt', $exception->getMessage());
+                $this->assertStringStartsWith(
+                    'OpenSSL could not read a key from the PEM text: error:',
+                    $exception->getMessage(),
+                );
+                self::assertMessageNamesAWrongPassphrase($exception->getMessage());
             }
 
             $this->assertFalse(openssl_error_string());
