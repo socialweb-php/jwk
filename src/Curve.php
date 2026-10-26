@@ -123,6 +123,37 @@ enum Curve: string
     }
 
     /**
+     * Returns the `EC` curve OpenSSL names in the details of a key, or
+     * `null` for a name the package does not implement
+     */
+    public static function fromOpensslCurveName(string $curveName): ?self
+    {
+        foreach ([self::P256, self::P384, self::P521, self::Secp256k1] as $curve) {
+            if ($curve->opensslCurveName() === $curveName) {
+                return $curve;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns the `OKP` curve whose keys OpenSSL reports under the
+     * `OPENSSL_KEYTYPE_*` constant, or `null` for any other constant,
+     * including `OPENSSL_KEYTYPE_EC`, whose curve is in the key's details
+     */
+    public static function fromOpensslKeyType(int $keyType): ?self
+    {
+        foreach ([self::Ed25519, self::Ed448, self::X25519, self::X448] as $curve) {
+            if ($curve->opensslKeyType() === $keyType) {
+                return $curve;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Returns the name OpenSSL gives the curve in the details of an `EC`
      * key, or `null` for an `OKP` curve, which OpenSSL treats as a key type
      */

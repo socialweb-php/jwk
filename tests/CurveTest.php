@@ -14,6 +14,7 @@ use function strlen;
 use const OPENSSL_KEYTYPE_EC;
 use const OPENSSL_KEYTYPE_ED25519;
 use const OPENSSL_KEYTYPE_ED448;
+use const OPENSSL_KEYTYPE_RSA;
 use const OPENSSL_KEYTYPE_X25519;
 use const OPENSSL_KEYTYPE_X448;
 
@@ -97,5 +98,27 @@ class CurveTest extends TestCase
         $this->assertNull(Curve::tryFrom('p-256'));
         $this->assertNull(Curve::tryFrom('ed25519'));
         $this->assertNull(Curve::tryFrom('prime256v1'));
+    }
+
+    public function testFindsAnEcCurveByItsOpenSslName(): void
+    {
+        $this->assertSame(Curve::P256, Curve::fromOpensslCurveName('prime256v1'));
+        $this->assertSame(Curve::P384, Curve::fromOpensslCurveName('secp384r1'));
+        $this->assertSame(Curve::P521, Curve::fromOpensslCurveName('secp521r1'));
+        $this->assertSame(Curve::Secp256k1, Curve::fromOpensslCurveName('secp256k1'));
+        $this->assertNull(Curve::fromOpensslCurveName('secp224r1'));
+        $this->assertNull(Curve::fromOpensslCurveName('P-256'));
+        $this->assertNull(Curve::fromOpensslCurveName(''));
+    }
+
+    public function testFindsAnOkpCurveByItsOpenSslKeyType(): void
+    {
+        $this->assertSame(Curve::Ed25519, Curve::fromOpensslKeyType(OPENSSL_KEYTYPE_ED25519));
+        $this->assertSame(Curve::Ed448, Curve::fromOpensslKeyType(OPENSSL_KEYTYPE_ED448));
+        $this->assertSame(Curve::X25519, Curve::fromOpensslKeyType(OPENSSL_KEYTYPE_X25519));
+        $this->assertSame(Curve::X448, Curve::fromOpensslKeyType(OPENSSL_KEYTYPE_X448));
+        $this->assertNull(Curve::fromOpensslKeyType(OPENSSL_KEYTYPE_EC));
+        $this->assertNull(Curve::fromOpensslKeyType(OPENSSL_KEYTYPE_RSA));
+        $this->assertNull(Curve::fromOpensslKeyType(-1));
     }
 }

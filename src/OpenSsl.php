@@ -26,12 +26,16 @@ namespace SocialWeb\Jwk;
 use LogicException;
 use OpenSSLAsymmetricKey;
 use SensitiveParameter;
+use SocialWeb\Jwk\Exception\ConversionFailed;
+use SocialWeb\Jwk\Exception\ConversionFailedReason;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
 use function array_key_first;
 use function array_keys;
+use function base64_encode;
+use function chunk_split;
 use function count;
 use function implode;
 use function in_array;
@@ -40,11 +44,17 @@ use function is_string;
 use function ltrim;
 use function openssl_error_string;
 use function openssl_get_curve_names;
+use function openssl_pkey_export;
 use function openssl_pkey_get_details;
+use function openssl_pkey_get_private;
+use function openssl_pkey_get_public;
 use function openssl_pkey_new;
+use function openssl_x509_read;
 use function sprintf;
 use function str_pad;
+use function str_starts_with;
 
+use const OPENSSL_CIPHER_AES_256_CBC;
 use const STR_PAD_LEFT;
 
 /**
@@ -169,6 +179,133 @@ final class OpenSsl
 
         /** @var array<string, mixed> $details */
         return $details;
+    }
+
+    /**
+     * Reads a key from PEM text, private when the text holds a private key
+     *
+     * The text is given to `openssl_pkey_get_private()` first and, when
+     * that fails, to `openssl_pkey_get_public()`, so every form OpenSSL
+     * writes is read: a PKCS #8 private key, encrypted or not, a PKCS #1
+     * or SEC 1 private key, a SubjectPublicKeyInfo, a PKCS #1 public key,
+     * and a certificate, whose public key is returned. A passphrase given
+     * for a key that is not encrypted is ignored, as OpenSSL ignores it.
+     *
+     * OpenSSL is always handed a passphrase string, an empty one for `null`,
+     * because with none it asks for one on the terminal when there is one.
+     *
+     * @throws InvalidArgument when the text starts with `file://`, which
+     *     OpenSSL would read as the path of a local file
+     * @throws ConversionFailed with `UnreadablePem` when OpenSSL reads no key
+     *     from the text, which includes an encrypted key given without its
+     *     passphrase or with a wrong one
+     */
+    public static function readPem(
+        #[SensitiveParameter] string $pem,
+        #[SensitiveParameter] ?string $passphrase,
+    ): OpenSSLAsymmetricKey {
+        if (str_starts_with($pem, 'file://')) {
+            throw new InvalidArgument('A key must be given as PEM text, not as a file path');
+        }
+
+        self::drainErrors();
+        $key = openssl_pkey_get_private($pem, $passphrase ?? '');
+
+        if ($key === false) {
+            $key = openssl_pkey_get_public($pem);
+        }
+
+        if ($key === false) {
+            throw new ConversionFailed(
+                ConversionFailedReason::UnreadablePem,
+                'OpenSSL could not read a key from the PEM text: ' . self::drainErrors(),
+            );
+        }
+
+        self::drainErrors();
+
+        return $key;
+    }
+
+    /**
+     * Returns the public key of a DER certificate
+     *
+     * `openssl_x509_read()` reads PEM text only, so the DER is wrapped as a
+     * `CERTIFICATE` PEM per RFC 7468 section 5 first.
+     *
+     * @param string $message The message of the refusal, to which OpenSSL's
+     *     error text is appended when there is any
+     * @param string $member The member the refusal names
+     *
+     * @throws InvalidJwk with `InvalidCertificate` when the bytes are not a
+     *     certificate OpenSSL reads, or hold a public key it cannot read
+     */
+    public static function certificatePublicKey(string $der, string $message, string $member): OpenSSLAsymmetricKey
+    {
+        $pem = "-----BEGIN CERTIFICATE-----\n"
+            . chunk_split(base64_encode($der), 64, "\n")
+            . "-----END CERTIFICATE-----\n";
+
+        self::drainErrors();
+        $certificate = @openssl_x509_read($pem);
+        $key = $certificate === false ? false : openssl_pkey_get_public($certificate);
+
+        if ($key === false) {
+            throw self::refusal(InvalidJwkReason::InvalidCertificate, $message, $member);
+        }
+
+        return $key;
+    }
+
+    /**
+     * Returns the public key as a SubjectPublicKeyInfo PEM, the `key` entry
+     * of the details, which OpenSSL writes in the strict form of RFC 7468
+     * section 3: 64-character lines, LF line endings, and a trailing newline
+     *
+     * A private key gives the PEM of its public key.
+     */
+    public static function publicPem(OpenSSLAsymmetricKey $key): string
+    {
+        $pem = self::details($key)['key'] ?? null;
+
+        if (!is_string($pem)) {
+            throw new LogicException('OpenSSL reported no public key PEM for a key it holds');
+        }
+
+        return $pem;
+    }
+
+    /**
+     * Returns the private key as a PKCS #8 PEM, encrypted with AES-256-CBC
+     * when a passphrase is given
+     *
+     * The cipher is passed explicitly because `openssl_pkey_export()`
+     * encrypts with triple DES by default, and encryption is asked for
+     * explicitly so that an OpenSSL configuration file that turns it off
+     * does not. The callers refuse what OpenSSL cannot export before
+     * calling: a public key, and an RSA key without its primes.
+     *
+     * @throws LogicException when OpenSSL does not export the key, with
+     *     OpenSSL's error text when there is any
+     */
+    public static function privatePem(OpenSSLAsymmetricKey $key, #[SensitiveParameter] ?string $passphrase): string
+    {
+        $options = $passphrase === null
+            ? []
+            : ['encrypt_key' => true, 'encrypt_key_cipher' => OPENSSL_CIPHER_AES_256_CBC];
+
+        self::drainErrors();
+        $pem = '';
+
+        if (!@openssl_pkey_export($key, $pem, $passphrase, $options) || !is_string($pem)) {
+            $errors = self::drainErrors();
+
+            throw new LogicException(
+                'OpenSSL could not export the private key' . ($errors === '' ? '' : ': ' . $errors),
+            );
+        }
+
+        return $pem;
     }
 
     /**

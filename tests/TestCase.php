@@ -13,6 +13,8 @@ use function hex2bin;
 use function is_array;
 use function is_string;
 use function json_decode;
+use function openssl_pkey_export;
+use function openssl_pkey_get_details;
 use function openssl_sign;
 use function preg_replace;
 
@@ -36,6 +38,15 @@ class TestCase extends BaseTestCase
         }
 
         return $contents;
+    }
+
+    /**
+     * Returns the text of a PEM fixture under `tests/fixtures/`, such as
+     * `rfc8410/section-10.1-public.pem`
+     */
+    protected static function fixturePem(string $file): string
+    {
+        return self::fixtureJson($file);
     }
 
     /**
@@ -98,6 +109,37 @@ class TestCase extends BaseTestCase
         }
 
         return $signature;
+    }
+
+    /**
+     * Returns the private key as the PKCS #8 PEM `openssl_pkey_export()`
+     * writes
+     */
+    protected static function exportPrivatePem(OpenSSLAsymmetricKey $key): string
+    {
+        $pem = '';
+
+        if (!openssl_pkey_export($key, $pem) || !is_string($pem)) {
+            throw new RuntimeException('OpenSSL could not export the key');
+        }
+
+        return $pem;
+    }
+
+    /**
+     * Returns the public key as the SubjectPublicKeyInfo PEM in the `key`
+     * entry of `openssl_pkey_get_details()`
+     */
+    protected static function exportPublicPem(OpenSSLAsymmetricKey $key): string
+    {
+        $details = openssl_pkey_get_details($key);
+        $pem = $details === false ? null : $details['key'];
+
+        if (!is_string($pem)) {
+            throw new RuntimeException('OpenSSL reported no public key PEM');
+        }
+
+        return $pem;
     }
 
     /**

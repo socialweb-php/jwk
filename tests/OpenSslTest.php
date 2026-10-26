@@ -4,19 +4,35 @@ declare(strict_types=1);
 
 namespace SocialWeb\Test\Jwk;
 
+use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\Base64Url;
+use SocialWeb\Jwk\Exception\ConversionFailed;
+use SocialWeb\Jwk\Exception\ConversionFailedReason;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
+use SocialWeb\Jwk\Jwk;
 use SocialWeb\Jwk\OpenSsl;
 
+use function array_slice;
+use function base64_decode;
+use function chunk_split;
+use function explode;
 use function openssl_error_string;
 use function openssl_pkey_get_public;
+use function openssl_pkey_new;
+use function openssl_x509_read;
+use function preg_replace;
+use function str_contains;
+use function str_ends_with;
 use function str_repeat;
+use function str_replace;
+use function strlen;
 
 use const OPENSSL_KEYTYPE_EC;
 use const OPENSSL_KEYTYPE_ED25519;
+use const OPENSSL_KEYTYPE_RSA;
 
 class OpenSslTest extends TestCase
 {
@@ -337,5 +353,264 @@ class OpenSslTest extends TestCase
         } catch (InvalidJwk $exception) {
             $this->assertSame($clean, $exception->getMessage());
         }
+    }
+
+    public function testReadsAPrivatePemAndAPublicPem(): void
+    {
+        $private = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.private.pem'), null);
+        $public = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'), null);
+
+        /** @var array{type: int, ed25519: array<string, string>} $privateDetails */
+        $privateDetails = OpenSsl::details($private);
+        /** @var array{type: int, ed25519: array<string, string>} $publicDetails */
+        $publicDetails = OpenSsl::details($public);
+
+        $this->assertSame(OPENSSL_KEYTYPE_ED25519, $privateDetails['type']);
+        $this->assertArrayHasKey('priv_key', $privateDetails['ed25519']);
+        $this->assertSame(OPENSSL_KEYTYPE_ED25519, $publicDetails['type']);
+        $this->assertArrayNotHasKey('priv_key', $publicDetails['ed25519']);
+        $this->assertSame($privateDetails['ed25519']['pub_key'], $publicDetails['ed25519']['pub_key']);
+        $this->assertFalse(openssl_error_string());
+    }
+
+    /**
+     * @return iterable<string, array{string, int}>
+     */
+    public static function pemFormProvider(): iterable
+    {
+        yield 'PKCS #1 RSA PRIVATE KEY' => ['rfc9421/test-key-rsa.private.pem', OPENSSL_KEYTYPE_RSA];
+        yield 'PKCS #1 RSA PUBLIC KEY' => ['rfc9421/test-key-rsa.public.pem', OPENSSL_KEYTYPE_RSA];
+        yield 'PKCS #8 RSA PRIVATE KEY' => ['rfc9421/test-key-rsa.private.pkcs8.pem', OPENSSL_KEYTYPE_RSA];
+        yield 'RSA SubjectPublicKeyInfo' => ['rfc9421/test-key-rsa.public.spki.pem', OPENSSL_KEYTYPE_RSA];
+        yield 'SEC 1 EC PRIVATE KEY' => ['rfc9421/test-key-ecc-p256.private.pem', OPENSSL_KEYTYPE_EC];
+        yield 'PKCS #8 EC PRIVATE KEY' => ['rfc9421/test-key-ecc-p256.private.pkcs8.pem', OPENSSL_KEYTYPE_EC];
+        yield 'EC SubjectPublicKeyInfo' => ['rfc9421/test-key-ecc-p256.public.pem', OPENSSL_KEYTYPE_EC];
+        yield 'PKCS #8 Ed25519 PRIVATE KEY' => ['rfc9421/test-key-ed25519.private.pem', OPENSSL_KEYTYPE_ED25519];
+        yield 'Ed25519 SubjectPublicKeyInfo' => ['rfc9421/test-key-ed25519.public.pem', OPENSSL_KEYTYPE_ED25519];
+    }
+
+    #[DataProvider('pemFormProvider')]
+    public function testReadsEveryPemFormOpenSslWrites(string $file, int $type): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem($file), null);
+
+        $this->assertSame($type, OpenSsl::details($key)['type']);
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testReadsThePublicKeyOfACertificatePem(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        /** @var list<string> $chain */
+        $chain = $fixture['x5c'];
+        $pem = "-----BEGIN CERTIFICATE-----\n" . chunk_split($chain[0], 64, "\n") . "-----END CERTIFICATE-----\n";
+
+        $key = OpenSsl::readPem($pem, null);
+
+        $this->assertSame(OPENSSL_KEYTYPE_RSA, OpenSsl::details($key)['type']);
+        $this->assertSame(OpenSsl::publicPem(Jwk::fromJson($fixture)->toOpenSslKey()), OpenSsl::publicPem($key));
+    }
+
+    public function testReadsAnEncryptedPemWithItsPassphraseOnly(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ecc-p256.private.pem'), null);
+        $encrypted = OpenSsl::privatePem($key, 'secret');
+
+        $read = OpenSsl::readPem($encrypted, 'secret');
+        $this->assertSame(OpenSsl::publicPem($key), OpenSsl::publicPem($read));
+        $this->assertFalse(openssl_error_string());
+
+        foreach ([null, 'wrong', ''] as $passphrase) {
+            try {
+                OpenSsl::readPem($encrypted, $passphrase);
+                $this->fail('Expected ConversionFailed');
+            } catch (ConversionFailed $exception) {
+                $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+                $this->assertStringStartsWith(
+                    'OpenSSL could not read a key from the PEM text: error:',
+                    $exception->getMessage(),
+                );
+                $this->assertStringContainsString('bad decrypt', $exception->getMessage());
+            }
+
+            $this->assertFalse(openssl_error_string());
+        }
+    }
+
+    public function testIgnoresAPassphraseGivenForAnUnencryptedPem(): void
+    {
+        $pem = self::fixturePem('rfc9421/test-key-ed25519.private.pem');
+        $expected = OpenSsl::publicPem(OpenSsl::readPem($pem, null));
+
+        $this->assertSame($expected, OpenSsl::publicPem(OpenSsl::readPem($pem, 'unused')));
+        $this->assertSame(
+            $expected,
+            OpenSsl::publicPem(OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'), 'unused')),
+        );
+    }
+
+    public function testRefusesAFilePathBeforeOpenSslSeesIt(): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A key must be given as PEM text, not as a file path');
+
+        OpenSsl::readPem('file:///etc/hosts', null);
+    }
+
+    public function testRefusesTextThatIsNotAPemAndLeavesNoErrorBehind(): void
+    {
+        try {
+            OpenSsl::readPem('not a pem', null);
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertSame(ConversionFailedReason::UnreadablePem, $exception->reason);
+            $this->assertStringStartsWith(
+                'OpenSSL could not read a key from the PEM text: error:',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testDrainsStaleErrorsBeforeReadingAPem(): void
+    {
+        @openssl_pkey_get_public('not a key');
+
+        OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'), null);
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testStaleErrorsDoNotReachTheMessageOfAnUnreadablePem(): void
+    {
+        @openssl_x509_read('not a certificate');
+
+        try {
+            OpenSsl::readPem('not a pem', null);
+            $this->fail('Expected ConversionFailed');
+        } catch (ConversionFailed $exception) {
+            $this->assertStringNotContainsString('no start line', $exception->getMessage());
+        }
+    }
+
+    public function testReadsAPemWithTextBeforeItAndCrlfLineEndings(): void
+    {
+        $pem = self::fixturePem('rfc9421/test-key-ecc-p256.public.pem');
+        $key = OpenSsl::readPem("Subject: test\r\n" . str_replace("\n", "\r\n", $pem), null);
+
+        $this->assertSame($pem, OpenSsl::publicPem($key));
+    }
+
+    public function testWritesThePublicPemOfAPrivateKeyInTheStrictForm(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-rsa.private.pem'), null);
+        $pem = OpenSsl::publicPem($key);
+
+        $this->assertSame(self::fixturePem('rfc9421/test-key-rsa.public.spki.pem'), $pem);
+        $this->assertTrue(str_ends_with($pem, "-----END PUBLIC KEY-----\n"));
+        $this->assertFalse(str_contains($pem, "\r"));
+
+        $lines = explode("\n", $pem);
+
+        foreach (array_slice($lines, 1, -3) as $line) {
+            $this->assertSame(64, strlen($line));
+        }
+    }
+
+    public function testWritesThePrivatePemAsUnencryptedPkcs8(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ecc-p256.private.pem'), null);
+
+        $this->assertSame(
+            self::fixturePem('rfc9421/test-key-ecc-p256.private.pkcs8.pem'),
+            OpenSsl::privatePem($key, null),
+        );
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testEncryptsThePrivatePemWithAes256CbcAndNotTripleDes(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ecc-p256.private.pem'), null);
+        $pem = OpenSsl::privatePem($key, 'secret');
+
+        $this->assertStringStartsWith("-----BEGIN ENCRYPTED PRIVATE KEY-----\n", $pem);
+        $this->assertTrue(str_ends_with($pem, "-----END ENCRYPTED PRIVATE KEY-----\n"));
+
+        $der = base64_decode((string) preg_replace('/-----[^-]+-----|\s/', '', $pem), true);
+        $this->assertIsString($der);
+        // The PBES2 scheme names its cipher by object identifier: aes256-CBC
+        // is 2.16.840.1.101.3.4.1.42 and des-ede3-cbc is 1.2.840.113549.3.7.
+        $this->assertTrue(str_contains($der, "\x06\x09\x60\x86\x48\x01\x65\x03\x04\x01\x2a"));
+        $this->assertFalse(str_contains($der, "\x06\x08\x2a\x86\x48\x86\xf7\x0d\x03\x07"));
+        $this->assertSame(OpenSsl::publicPem($key), OpenSsl::publicPem(OpenSsl::readPem($pem, 'secret')));
+    }
+
+    public function testPrivatePemThrowsWhenOpenSslDoesNotExportTheKey(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'), null);
+        @openssl_x509_read('not a certificate');
+
+        try {
+            OpenSsl::privatePem($key, null);
+            $this->fail('Expected LogicException');
+        } catch (LogicException $exception) {
+            $this->assertSame('OpenSSL could not export the private key', $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testPrivatePemAppendsOpenSslsErrorTextWhenThereIsAny(): void
+    {
+        $fixture = self::fixture('rfc9421/test-key-rsa.json');
+        $members = [];
+
+        foreach (['n', 'e', 'd'] as $name) {
+            $members[$name] = Base64Url::decode(self::fixtureString($fixture, $name));
+        }
+
+        $key = openssl_pkey_new(['rsa' => $members]);
+        $this->assertNotFalse($key);
+
+        try {
+            OpenSsl::privatePem($key, null);
+            $this->fail('Expected LogicException');
+        } catch (LogicException $exception) {
+            $this->assertStringStartsWith('OpenSSL could not export the private key: error:', $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testReadsThePublicKeyOfADerCertificate(): void
+    {
+        $fixture = self::fixture('rfc7517/appendix-b.json');
+        /** @var list<string> $chain */
+        $chain = $fixture['x5c'];
+        $der = base64_decode($chain[0], true);
+        $this->assertIsString($der);
+
+        $key = OpenSsl::certificatePublicKey($der, 'unused', 'x5c');
+
+        $this->assertSame(OpenSsl::publicPem(Jwk::fromJson($fixture)->toOpenSslKey()), OpenSsl::publicPem($key));
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testRefusesBytesThatAreNotACertificate(): void
+    {
+        @openssl_pkey_get_public('not a key');
+
+        try {
+            OpenSsl::certificatePublicKey("\x30\x03\x02\x01\x01", 'Not a certificate', 'x5c');
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::InvalidCertificate, $exception->reason);
+            $this->assertSame('x5c', $exception->member);
+            $this->assertStringStartsWith('Not a certificate: error:', $exception->getMessage());
+            $this->assertStringNotContainsString('DECODER', $exception->getMessage());
+        }
+
+        $this->assertFalse(openssl_error_string());
     }
 }
