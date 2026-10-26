@@ -1,8 +1,17 @@
 {
     "name": "socialweb/jwk",
-    "description": "",
+    "description": "Reads, writes, and converts JSON Web Keys and JWK Sets under RFC 7517, with thumbprints and PEM conversion",
     "license": "LGPL-3.0-or-later",
     "type": "library",
+    "keywords": [
+        "jwk",
+        "jwks",
+        "json-web-key",
+        "jose",
+        "rfc7517",
+        "thumbprint",
+        "pem"
+    ],
     "require": {
         "php": "^8.5",
         "ext-openssl": "*"
