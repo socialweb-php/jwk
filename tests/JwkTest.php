@@ -35,6 +35,7 @@ use stdClass;
 use function array_diff_key;
 use function array_keys;
 use function base64_decode;
+use function base64_encode;
 use function hash;
 use function ini_set;
 use function is_array;
@@ -54,8 +55,10 @@ use function sprintf;
 use function str_contains;
 use function str_repeat;
 use function strlen;
+use function strpos;
 use function strtr;
 use function substr;
+use function substr_replace;
 use function unserialize;
 
 use const INF;
@@ -1546,6 +1549,31 @@ class JwkTest extends TestCase
             ),
             publicExponent: Base64Url::decode('AQAB'),
         );
+
+        try {
+            $key->withCertificateChain([$entry]);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::CertificateKeyMismatch, $exception->reason);
+            $this->assertSame(
+                'The first certificate of the "x5c" member holds a different key',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testRefusesACertificateHoldingAnRsaKeyThatBreaksTheRulesOfAParsedKey(): void
+    {
+        $der = self::appendixBCertificate();
+        $exponent = "\x02\x03\x01\x00\x01";
+        $position = strpos($der, $exponent);
+        $this->assertNotFalse($position);
+
+        // The public exponent 65536 is even, so no parsed key may hold it.
+        $entry = base64_encode(substr_replace($der, "\x02\x03\x01\x00\x00", $position, strlen($exponent)));
+        $key = Jwk::fromJson(array_diff_key(self::fixture('rfc7517/appendix-b.json'), ['x5c' => true]));
 
         try {
             $key->withCertificateChain([$entry]);
