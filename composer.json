@@ -12,6 +12,10 @@
         "thumbprint",
         "pem"
     ],
+    "support": {
+        "issues": "https://github.com/socialweb-php/jwk/issues",
+        "security": "https://github.com/socialweb-php/jwk/security/policy"
+    },
     "require": {
         "php": "^8.5",
         "ext-openssl": "*"
