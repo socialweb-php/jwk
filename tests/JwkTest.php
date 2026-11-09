@@ -69,7 +69,7 @@ use const NAN;
 use const OPENSSL_KEYTYPE_EC;
 use const OPENSSL_KEYTYPE_ED25519;
 
-class JwkTest extends TestCase
+final class JwkTest extends TestCase
 {
     public function testFromJsonReturnsTheClassForTheKeyType(): void
     {
@@ -115,14 +115,14 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function emptyObjectInATreeProvider(): iterable
+    public static function emptyObjectsInATree(): iterable
     {
         yield 'key_ops as {}' => ['{"kty":"oct","k":"AQAB","key_ops":{}}', 'key_ops'];
         yield 'x5c as {}' => ['{"kty":"oct","k":"AQAB","x5c":{}}', 'x5c'];
         yield 'an oth entry as []' => ['{"kty":"RSA","n":"AQ","e":"AQ","oth":[[]]}', 'oth'];
     }
 
-    #[DataProvider('emptyObjectInATreeProvider')]
+    #[DataProvider('emptyObjectsInATree')]
     public function testAnEmptyObjectAndAnEmptyArrayInATreeAreDifferentValues(string $json, string $member): void
     {
         $tree = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
@@ -149,7 +149,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{string | array<array-key, mixed>, InvalidJwkReason, ?string}>
      */
-    public static function refusedObjectProvider(): iterable
+    public static function refusedObjects(): iterable
     {
         yield 'malformed JSON' => ['{"kty":', InvalidJwkReason::MalformedJson, null];
         yield 'a JSON array' => ['[{"kty":"oct","k":"AQAB"}]', InvalidJwkReason::NotAnObject, null];
@@ -163,7 +163,7 @@ class JwkTest extends TestCase
     /**
      * @param string | array<array-key, mixed> $json
      */
-    #[DataProvider('refusedObjectProvider')]
+    #[DataProvider('refusedObjects')]
     public function testRefusesWhatIsNotAJwkObject(
         string | array $json,
         InvalidJwkReason $reason,
@@ -194,7 +194,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string}>
      */
-    public static function publicOnlyProvider(): iterable
+    public static function publicOnlyRefusals(): iterable
     {
         yield 'an oct key' => [self::fixture('rfc7520/section-3.5.json'), InvalidJwkReason::SymmetricKey, 'kty'];
         yield 'an RSA key with d' => [
@@ -227,7 +227,7 @@ class JwkTest extends TestCase
     /**
      * @param array<string, mixed> $jwk
      */
-    #[DataProvider('publicOnlyProvider')]
+    #[DataProvider('publicOnlyRefusals')]
     public function testPublicOnlyRefusesPrivateAndSymmetricKeys(
         array $jwk,
         InvalidJwkReason $reason,
@@ -252,7 +252,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string, string}>
      */
-    public static function commonMemberProvider(): iterable
+    public static function invalidCommonMembers(): iterable
     {
         $okp = self::fixture('rfc8037/appendix-a2.json');
 
@@ -327,7 +327,7 @@ class JwkTest extends TestCase
     /**
      * @param array<string, mixed> $jwk
      */
-    #[DataProvider('commonMemberProvider')]
+    #[DataProvider('invalidCommonMembers')]
     public function testAppliesTheRulesOfTheCommonMembers(
         array $jwk,
         InvalidJwkReason $reason,
@@ -643,7 +643,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, string}>
      */
-    public static function wrongListArgumentProvider(): iterable
+    public static function wrongListArguments(): iterable
     {
         yield 'a key operation that is not a string' => [['keyOperations' => [1]], 'key_ops'];
         yield 'key operations that are not a list' => [['keyOperations' => ['a' => 'sign']], 'key_ops'];
@@ -657,7 +657,7 @@ class JwkTest extends TestCase
      *
      * @param array<string, mixed> $arguments
      */
-    #[DataProvider('wrongListArgumentProvider')]
+    #[DataProvider('wrongListArguments')]
     public function testAConstructorChecksItsListArgumentsAsParsingDoes(array $arguments, string $member): void
     {
         try {
@@ -673,7 +673,7 @@ class JwkTest extends TestCase
     /**
      * @param array<string, mixed> $arguments
      */
-    #[DataProvider('wrongListArgumentProvider')]
+    #[DataProvider('wrongListArguments')]
     public function testTheWithMethodsCheckTheirListArgumentsAsParsingDoes(array $arguments, string $member): void
     {
         $key = new OctKey("\x01");
@@ -698,7 +698,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{Closure(OctKey): OctKey, string}>
      */
-    public static function notUtf8CommonMemberProvider(): iterable
+    public static function notUtf8CommonMembers(): iterable
     {
         yield 'kid' => [static fn (OctKey $key): OctKey => $key->withKeyId("\xff"), 'kid'];
         yield 'alg' => [static fn (OctKey $key): OctKey => $key->withAlgorithm("HS\xff"), 'alg'];
@@ -716,7 +716,7 @@ class JwkTest extends TestCase
     /**
      * @param Closure(OctKey): OctKey $change
      */
-    #[DataProvider('notUtf8CommonMemberProvider')]
+    #[DataProvider('notUtf8CommonMembers')]
     public function testRefusesACommonMemberThatIsNotUtf8(Closure $change, string $member): void
     {
         try {
@@ -1030,7 +1030,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{string, string, class-string<Jwk>, bool}>
      */
-    public static function rfc9421PemProvider(): iterable
+    public static function rfc9421Pems(): iterable
     {
         yield 'B.1.1 RSA PUBLIC KEY' => [
             'rfc9421/test-key-rsa.public.pem',
@@ -1085,7 +1085,7 @@ class JwkTest extends TestCase
     /**
      * @param class-string<Jwk> $class
      */
-    #[DataProvider('rfc9421PemProvider')]
+    #[DataProvider('rfc9421Pems')]
     public function testFromPemReadsTheRfc9421KeysAsTheirJwkForms(
         string $pem,
         string $jwk,
@@ -1113,7 +1113,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{string, string, string}>
      */
-    public static function rfc9421JwkProvider(): iterable
+    public static function rfc9421Jwks(): iterable
     {
         yield 'B.1.1' => [
             'rfc9421/test-key-rsa.json',
@@ -1137,7 +1137,7 @@ class JwkTest extends TestCase
         ];
     }
 
-    #[DataProvider('rfc9421JwkProvider')]
+    #[DataProvider('rfc9421Jwks')]
     public function testWritesTheRfc9421JwksAsThePemsOpenSslWrites(
         string $jwk,
         string $publicPem,
@@ -1205,13 +1205,13 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{bool}>
      */
-    public static function bundleOrderProvider(): iterable
+    public static function bundleOrders(): iterable
     {
         yield 'the certificate first' => [true];
         yield 'the key first' => [false];
     }
 
-    #[DataProvider('bundleOrderProvider')]
+    #[DataProvider('bundleOrders')]
     public function testFromPemRefusesAnEncryptedKeyBesideACertificateWithoutItsPassphrase(
         bool $certificateFirst,
     ): void {
@@ -1335,7 +1335,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, string}>
      */
-    public static function certificateMismatchProvider(): iterable
+    public static function certificateMismatches(): iterable
     {
         /** @var list<string> $chain */
         $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
@@ -1353,7 +1353,7 @@ class JwkTest extends TestCase
     /**
      * @param array<string, mixed> $jwk
      */
-    #[DataProvider('certificateMismatchProvider')]
+    #[DataProvider('certificateMismatches')]
     public function testRefusesACertificateThatHoldsAnotherKey(array $jwk, string $message): void
     {
         try {
@@ -1371,7 +1371,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{string, string, string}>
      */
-    public static function certificateThumbprintMismatchProvider(): iterable
+    public static function certificateThumbprintMismatches(): iterable
     {
         yield 'x5t' => [
             'x5t',
@@ -1390,7 +1390,7 @@ class JwkTest extends TestCase
         ];
     }
 
-    #[DataProvider('certificateThumbprintMismatchProvider')]
+    #[DataProvider('certificateThumbprintMismatches')]
     public function testRefusesAThumbprintThatIsNotTheCertificatesDigest(
         string $member,
         string $value,
@@ -1421,7 +1421,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{list<string>, non-empty-string}>
      */
-    public static function invalidCertificateProvider(): iterable
+    public static function invalidCertificates(): iterable
     {
         /** @var list<string> $chain */
         $chain = self::fixture('rfc7517/appendix-b.json')['x5c'];
@@ -1448,7 +1448,7 @@ class JwkTest extends TestCase
      * @param list<string> $chain
      * @param non-empty-string $message
      */
-    #[DataProvider('invalidCertificateProvider')]
+    #[DataProvider('invalidCertificates')]
     public function testRefusesACertificateChainEntryThatDoesNotDecode(array $chain, string $message): void
     {
         try {
@@ -1533,7 +1533,7 @@ class JwkTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, string}>
      */
-    public static function certificateKeyTypeProvider(): iterable
+    public static function certificateKeyTypes(): iterable
     {
         yield 'EC' => [['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1'], 'sha256'];
         // An Ed25519 signature hashes inside the algorithm, so the
@@ -1544,7 +1544,7 @@ class JwkTest extends TestCase
     /**
      * @param array<string, mixed> $options
      */
-    #[DataProvider('certificateKeyTypeProvider')]
+    #[DataProvider('certificateKeyTypes')]
     public function testAcceptsACertificateHoldingAnEcOrOkpKey(array $options, string $digest): void
     {
         $generated = openssl_pkey_new($options);

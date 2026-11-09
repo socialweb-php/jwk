@@ -25,7 +25,7 @@ use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 use const NAN;
 
-class JsonValueTest extends TestCase
+final class JsonValueTest extends TestCase
 {
     public function testReadsScalarsAsTheyAre(): void
     {
@@ -95,7 +95,7 @@ class JsonValueTest extends TestCase
     /**
      * @return iterable<string, array{mixed, InvalidJwkReason, string}>
      */
-    public static function refusedValueProvider(): iterable
+    public static function refusedValues(): iterable
     {
         yield 'a string that is not UTF-8' => [
             "\xff",
@@ -150,7 +150,7 @@ class JsonValueTest extends TestCase
         ];
     }
 
-    #[DataProvider('refusedValueProvider')]
+    #[DataProvider('refusedValues')]
     public function testRefusesWhatJsonTextCannotHold(mixed $value, InvalidJwkReason $reason, string $message): void
     {
         try {
@@ -186,13 +186,13 @@ class JsonValueTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function refusedNameProvider(): iterable
+    public static function refusedNames(): iterable
     {
         yield 'not UTF-8' => ["a\xff", 'A member name is not valid UTF-8'];
         yield 'a NUL byte first' => ["\0a", 'A member name starts with a NUL byte'];
     }
 
-    #[DataProvider('refusedNameProvider')]
+    #[DataProvider('refusedNames')]
     public function testRefusesAMemberNameJsonTextCannotHold(string $name, string $message): void
     {
         try {
@@ -227,7 +227,7 @@ class JsonValueTest extends TestCase
     /**
      * @return iterable<string, array{object}>
      */
-    public static function objectThatIsNotAStdClassProvider(): iterable
+    public static function objectsThatAreNotStdClass(): iterable
     {
         yield 'a subclass whose JSON form is NAN' => [
             new class extends stdClass implements JsonSerializable {
@@ -260,7 +260,7 @@ class JsonValueTest extends TestCase
         yield 'an enum case' => [KeyUse::Signature];
     }
 
-    #[DataProvider('objectThatIsNotAStdClassProvider')]
+    #[DataProvider('objectsThatAreNotStdClass')]
     public function testRefusesAnObjectWhoseClassIsNotStdClass(object $object): void
     {
         foreach ([$object, [$object], (object) ['a' => $object]] as $value) {
@@ -323,7 +323,7 @@ class JsonValueTest extends TestCase
     /**
      * @return iterable<string, array{array<array-key, mixed> | stdClass}>
      */
-    public static function notAnObjectProvider(): iterable
+    public static function valuesThatAreNotObjects(): iterable
     {
         yield 'a PHP list' => [[1, 2]];
         yield 'an empty PHP array' => [[]];
@@ -337,7 +337,7 @@ class JsonValueTest extends TestCase
     /**
      * @param array<array-key, mixed> | stdClass $object
      */
-    #[DataProvider('notAnObjectProvider')]
+    #[DataProvider('valuesThatAreNotObjects')]
     public function testReadMembersRefusesWhatIsNotAJsonObject(array | stdClass $object): void
     {
         try {

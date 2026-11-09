@@ -18,7 +18,7 @@ use function sprintf;
 use function strlen;
 use function unserialize;
 
-class OtherPrimeInfoTest extends TestCase
+final class OtherPrimeInfoTest extends TestCase
 {
     public function testHoldsTheThreeMembersAndWritesThemAsBase64Url(): void
     {
@@ -97,7 +97,7 @@ class OtherPrimeInfoTest extends TestCase
     /**
      * @return iterable<string, array{MemberReader}>
      */
-    public static function readerThatIsNotAnOthEntryProvider(): iterable
+    public static function readersThatAreNotOthEntries(): iterable
     {
         yield 'a JWK' => [MemberReader::fromJson('{"r":"AQI","d":"Aw","t":"BAUG"}')];
         yield 'an entry of another member' => [
@@ -110,7 +110,7 @@ class OtherPrimeInfoTest extends TestCase
         ];
     }
 
-    #[DataProvider('readerThatIsNotAnOthEntryProvider')]
+    #[DataProvider('readersThatAreNotOthEntries')]
     public function testRefusesAReaderThatIsNotAnOthEntry(MemberReader $reader): void
     {
         $this->expectException(InvalidArgument::class);

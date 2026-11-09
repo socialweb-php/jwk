@@ -8,12 +8,12 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\KeyOperation;
 use SocialWeb\Jwk\KeyUse;
 
-class KeyOperationTest extends TestCase
+final class KeyOperationTest extends TestCase
 {
     /**
      * @return iterable<string, array{KeyOperation, string, KeyUse}>
      */
-    public static function operationProvider(): iterable
+    public static function operations(): iterable
     {
         yield 'sign' => [KeyOperation::Sign, 'sign', KeyUse::Signature];
         yield 'verify' => [KeyOperation::Verify, 'verify', KeyUse::Signature];
@@ -25,7 +25,7 @@ class KeyOperationTest extends TestCase
         yield 'deriveBits' => [KeyOperation::DeriveBits, 'deriveBits', KeyUse::Encryption];
     }
 
-    #[DataProvider('operationProvider')]
+    #[DataProvider('operations')]
     public function testIsBackedByTheRegisteredValueAndKnowsItsUse(
         KeyOperation $operation,
         string $value,

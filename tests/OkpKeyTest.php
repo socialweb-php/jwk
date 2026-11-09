@@ -32,7 +32,7 @@ use const OPENSSL_KEYTYPE_X25519;
 use const OPENSSL_KEYTYPE_X448;
 use const OPENSSL_VERSION_NUMBER;
 
-class OkpKeyTest extends TestCase
+final class OkpKeyTest extends TestCase
 {
     private const string RFC8037_THUMBPRINT = 'kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k';
 
@@ -124,7 +124,7 @@ class OkpKeyTest extends TestCase
     /**
      * @return iterable<string, array{string, Curve, string}>
      */
-    public static function montgomeryFixtureProvider(): iterable
+    public static function montgomeryFixtures(): iterable
     {
         yield 'RFC 8037 appendix A.6, Bob' => ['rfc8037/appendix-a6-bob.json', Curve::X25519, self::X25519_BOB_PUBLIC];
         yield 'RFC 8037 appendix A.6, ephemeral' => [
@@ -140,7 +140,7 @@ class OkpKeyTest extends TestCase
         ];
     }
 
-    #[DataProvider('montgomeryFixtureProvider')]
+    #[DataProvider('montgomeryFixtures')]
     public function testParsesTheRfc8037KeyAgreementKeysWhichAreTheRfc7748Vectors(
         string $file,
         Curve $curve,
@@ -163,7 +163,7 @@ class OkpKeyTest extends TestCase
     /**
      * @return iterable<string, array{Curve, string, string}>
      */
-    public static function keyPairProvider(): iterable
+    public static function keyPairs(): iterable
     {
         yield 'Ed25519, RFC 8032 TEST 1' => [Curve::Ed25519, self::ED25519_TEST1_SECRET, self::ED25519_TEST1_PUBLIC];
         yield 'Ed25519, RFC 8032 TEST 2' => [Curve::Ed25519, self::ED25519_TEST2_SECRET, self::ED25519_TEST2_PUBLIC];
@@ -174,7 +174,7 @@ class OkpKeyTest extends TestCase
         yield 'X448, Bob' => [Curve::X448, self::X448_BOB_SECRET, self::X448_BOB_PUBLIC];
     }
 
-    #[DataProvider('keyPairProvider')]
+    #[DataProvider('keyPairs')]
     public function testAcceptsEachSpecificationKeyPair(Curve $curve, string $secretHex, string $publicHex): void
     {
         $key = new OkpKey($curve, self::hex($publicHex), self::hex($secretHex));
@@ -206,7 +206,7 @@ class OkpKeyTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string}>
      */
-    public static function refusedProvider(): iterable
+    public static function refusedKeys(): iterable
     {
         $a1 = self::fixture('rfc8037/appendix-a1.json');
         $x = Base64Url::decode(self::fixtureString($a1, 'x'));
@@ -263,7 +263,7 @@ class OkpKeyTest extends TestCase
     /**
      * @param array<string, mixed> $jwk
      */
-    #[DataProvider('refusedProvider')]
+    #[DataProvider('refusedKeys')]
     public function testRefusesAMalformedKey(array $jwk, InvalidJwkReason $reason, string $member): void
     {
         try {
@@ -340,7 +340,7 @@ class OkpKeyTest extends TestCase
     /**
      * @return iterable<string, array{Curve, int}>
      */
-    public static function generatedCurveProvider(): iterable
+    public static function generatedCurves(): iterable
     {
         yield 'Ed25519' => [Curve::Ed25519, OPENSSL_KEYTYPE_ED25519];
         yield 'Ed448' => [Curve::Ed448, OPENSSL_KEYTYPE_ED448];
@@ -348,7 +348,7 @@ class OkpKeyTest extends TestCase
         yield 'X448' => [Curve::X448, OPENSSL_KEYTYPE_X448];
     }
 
-    #[DataProvider('generatedCurveProvider')]
+    #[DataProvider('generatedCurves')]
     public function testRoundTripsAGeneratedKeyThroughPemAndJwk(Curve $curve, int $keyType): void
     {
         $generated = openssl_pkey_new(['private_key_type' => $keyType]);
@@ -447,7 +447,7 @@ class OkpKeyTest extends TestCase
     /**
      * @return iterable<string, array{string, bool}>
      */
-    public static function pemRoundTripFixtureProvider(): iterable
+    public static function pemRoundTripFixtures(): iterable
     {
         yield 'RFC 8037 appendix A.1, Ed25519 private' => ['rfc8037/appendix-a1.json', true];
         yield 'RFC 8037 appendix A.2, Ed25519 public' => ['rfc8037/appendix-a2.json', false];
@@ -455,7 +455,7 @@ class OkpKeyTest extends TestCase
         yield 'RFC 8037 appendix A.7, X448 public' => ['rfc8037/appendix-a7-dave.json', false];
     }
 
-    #[DataProvider('pemRoundTripFixtureProvider')]
+    #[DataProvider('pemRoundTripFixtures')]
     public function testRoundTripsAFixtureThroughPem(string $file, bool $private): void
     {
         $fixture = self::fixture($file);

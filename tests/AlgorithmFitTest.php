@@ -11,14 +11,14 @@ use SocialWeb\Jwk\KeyType;
 
 use function in_array;
 
-class AlgorithmFitTest extends TestCase
+final class AlgorithmFitTest extends TestCase
 {
     private const array ECDH_ES = ['ECDH-ES', 'ECDH-ES+A128KW', 'ECDH-ES+A192KW', 'ECDH-ES+A256KW'];
 
     /**
      * @return iterable<string, array{KeyType, ?Curve, list<string>}>
      */
-    public static function fitProvider(): iterable
+    public static function algorithmFits(): iterable
     {
         yield 'RSA' => [
             KeyType::Rsa,
@@ -50,7 +50,7 @@ class AlgorithmFitTest extends TestCase
     /**
      * @param list<string> $fitting
      */
-    #[DataProvider('fitProvider')]
+    #[DataProvider('algorithmFits')]
     public function testExactlyTheTabledAlgorithmsFitEachKey(KeyType $keyType, ?Curve $curve, array $fitting): void
     {
         foreach ($fitting as $algorithm) {
@@ -114,7 +114,7 @@ class AlgorithmFitTest extends TestCase
     {
         $algorithms = ['none', 'PBES2-HS256+A128KW', 'PBES2-HS384+A192KW', 'PBES2-HS512+A256KW'];
 
-        foreach (self::fitProvider() as [, , $fitting]) {
+        foreach (self::algorithmFits() as [, , $fitting]) {
             foreach ($fitting as $algorithm) {
                 if (!in_array($algorithm, $algorithms, true)) {
                     $algorithms[] = $algorithm;

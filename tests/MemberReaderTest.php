@@ -17,7 +17,7 @@ use function sprintf;
 use function str_contains;
 use function str_repeat;
 
-class MemberReaderTest extends TestCase
+final class MemberReaderTest extends TestCase
 {
     public function testReadsAnObjectFromJsonText(): void
     {
@@ -161,7 +161,7 @@ class MemberReaderTest extends TestCase
     /**
      * @return iterable<string, array{string | array<array-key, mixed>}>
      */
-    public static function notAnObjectProvider(): iterable
+    public static function valuesThatAreNotObjects(): iterable
     {
         yield 'a JSON array' => ['["kty"]'];
         yield 'a JSON string' => ['"kty"'];
@@ -174,7 +174,7 @@ class MemberReaderTest extends TestCase
     /**
      * @param string | array<array-key, mixed> $json
      */
-    #[DataProvider('notAnObjectProvider')]
+    #[DataProvider('valuesThatAreNotObjects')]
     public function testRefusesAValueThatIsNotAnObject(string | array $json): void
     {
         try {
@@ -270,7 +270,7 @@ class MemberReaderTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function badStringListProvider(): iterable
+    public static function badStringLists(): iterable
     {
         yield 'a string' => ['{"key_ops":"sign"}', 'The "key_ops" member must be an array'];
         yield 'an object' => ['{"key_ops":{"a":"sign"}}', 'The "key_ops" member must be an array'];
@@ -278,7 +278,7 @@ class MemberReaderTest extends TestCase
         yield 'a null entry' => ['{"key_ops":[null]}', 'Every entry of the "key_ops" member must be a string'];
     }
 
-    #[DataProvider('badStringListProvider')]
+    #[DataProvider('badStringLists')]
     public function testAStringListMustBeAnArrayOfStrings(string $json, string $message): void
     {
         try {
@@ -309,7 +309,7 @@ class MemberReaderTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function badObjectListProvider(): iterable
+    public static function badObjectLists(): iterable
     {
         yield 'a string' => ['{"oth":"r"}', 'The "oth" member must be an array'];
         yield 'an object' => ['{"oth":{"r":"AQ"}}', 'The "oth" member must be an array'];
@@ -317,7 +317,7 @@ class MemberReaderTest extends TestCase
         yield 'an array entry' => ['{"oth":[["AQ"]]}', 'Every entry of the "oth" member must be an object'];
     }
 
-    #[DataProvider('badObjectListProvider')]
+    #[DataProvider('badObjectLists')]
     public function testAnObjectListMustBeAnArrayOfObjects(string $json, string $message): void
     {
         try {
@@ -483,7 +483,7 @@ class MemberReaderTest extends TestCase
     /**
      * @return iterable<string, array{string, string, InvalidJwkReason, string}>
      */
-    public static function entryErrorProvider(): iterable
+    public static function entryErrors(): iterable
     {
         yield 'a missing string' => [
             '{}',
@@ -536,7 +536,7 @@ class MemberReaderTest extends TestCase
         ];
     }
 
-    #[DataProvider('entryErrorProvider')]
+    #[DataProvider('entryErrors')]
     public function testAnErrorInAnEntryNamesTheListAndThePosition(
         string $entry,
         string $method,

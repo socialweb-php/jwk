@@ -11,7 +11,7 @@ use SocialWeb\Jwk\Exception\JwkException;
 use SocialWeb\Test\Jwk\TestCase;
 use UnexpectedValueException;
 
-class InvalidJwkTest extends TestCase
+final class InvalidJwkTest extends TestCase
 {
     public function testCanBeCaughtAsAJwkException(): void
     {

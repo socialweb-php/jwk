@@ -25,7 +25,7 @@ use function substr;
 
 use const JSON_THROW_ON_ERROR;
 
-class OctKeyTest extends TestCase
+final class OctKeyTest extends TestCase
 {
     public function testParsesTheRfc7520Section35HmacKey(): void
     {
@@ -181,14 +181,14 @@ class OctKeyTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function definedMemberNameProvider(): iterable
+    public static function definedMemberNames(): iterable
     {
         yield 'kty' => ['kty'];
         yield 'kid' => ['kid'];
         yield 'k' => ['k'];
     }
 
-    #[DataProvider('definedMemberNameProvider')]
+    #[DataProvider('definedMemberNames')]
     public function testRefusesAnAdditionalMemberNamedForADefinedMember(string $name): void
     {
         $this->expectException(InvalidArgument::class);

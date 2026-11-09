@@ -33,7 +33,7 @@ use const OPENSSL_ALGO_SHA256;
 use const OPENSSL_KEYTYPE_EC;
 use const STR_PAD_LEFT;
 
-class EcKeyTest extends TestCase
+final class EcKeyTest extends TestCase
 {
     public function testParsesTheRfc7517Section3Example(): void
     {
@@ -70,7 +70,7 @@ class EcKeyTest extends TestCase
     /**
      * @return iterable<string, array{string, Curve, bool}>
      */
-    public static function fixtureProvider(): iterable
+    public static function fixtures(): iterable
     {
         yield 'RFC 7520 section 3.1, P-521 public' => ['rfc7520/section-3.1.json', Curve::P521, false];
         yield 'RFC 7520 section 3.2, P-521 private' => ['rfc7520/section-3.2.json', Curve::P521, true];
@@ -80,7 +80,7 @@ class EcKeyTest extends TestCase
         yield 'RFC 7520 figure 122, P-256 ephemeral' => ['rfc7520/section-5.5-figure-122.json', Curve::P256, true];
     }
 
-    #[DataProvider('fixtureProvider')]
+    #[DataProvider('fixtures')]
     public function testParsesAndWritesBackEachFixture(string $file, Curve $curve, bool $private): void
     {
         $fixture = self::fixture($file);
@@ -172,7 +172,7 @@ class EcKeyTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string}>
      */
-    public static function refusedProvider(): iterable
+    public static function refusedKeys(): iterable
     {
         $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 0);
         $other = self::fixture('rfc7520/section-5.5-figure-120.json');
@@ -252,7 +252,7 @@ class EcKeyTest extends TestCase
     /**
      * @param array<string, mixed> $jwk
      */
-    #[DataProvider('refusedProvider')]
+    #[DataProvider('refusedKeys')]
     public function testRefusesAMalformedKey(array $jwk, InvalidJwkReason $reason, string $member): void
     {
         try {
@@ -375,7 +375,7 @@ class EcKeyTest extends TestCase
     /**
      * @return iterable<string, array{Curve, string}>
      */
-    public static function generatedCurveProvider(): iterable
+    public static function generatedCurves(): iterable
     {
         yield 'P-256' => [Curve::P256, 'prime256v1'];
         yield 'P-384' => [Curve::P384, 'secp384r1'];
@@ -383,7 +383,7 @@ class EcKeyTest extends TestCase
         yield 'secp256k1' => [Curve::Secp256k1, 'secp256k1'];
     }
 
-    #[DataProvider('generatedCurveProvider')]
+    #[DataProvider('generatedCurves')]
     public function testRoundTripsAGeneratedKeyThroughPemAndJwk(Curve $curve, string $curveName): void
     {
         $generated = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => $curveName]);
@@ -441,14 +441,14 @@ class EcKeyTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function pemRoundTripFixtureProvider(): iterable
+    public static function pemRoundTripFixtures(): iterable
     {
         yield 'RFC 7520 section 3.2, P-521 private' => ['rfc7520/section-3.2.json'];
         yield 'RFC 7520 figure 108, P-384 private' => ['rfc7520/section-5.4-figure-108.json'];
         yield 'RFC 7520 figure 120, P-256 private' => ['rfc7520/section-5.5-figure-120.json'];
     }
 
-    #[DataProvider('pemRoundTripFixtureProvider')]
+    #[DataProvider('pemRoundTripFixtures')]
     public function testRoundTripsAFixtureThroughPem(string $file): void
     {
         $fixture = self::fixture($file);

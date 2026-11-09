@@ -31,12 +31,12 @@ use const OPENSSL_KEYTYPE_ED448;
 use const OPENSSL_KEYTYPE_X25519;
 use const OPENSSL_KEYTYPE_X448;
 
-class OpenSslKeyReaderTest extends TestCase
+final class OpenSslKeyReaderTest extends TestCase
 {
     /**
      * @return iterable<string, array{string, string, class-string<Jwk>, bool}>
      */
-    public static function fixtureProvider(): iterable
+    public static function fixtures(): iterable
     {
         $rsa = 'rfc9421/test-key-rsa';
         $ec = 'rfc9421/test-key-ecc-p256';
@@ -53,7 +53,7 @@ class OpenSslKeyReaderTest extends TestCase
     /**
      * @param class-string<Jwk> $class
      */
-    #[DataProvider('fixtureProvider')]
+    #[DataProvider('fixtures')]
     public function testReadsTheMembersOpenSslReports(string $pem, string $jwk, string $class, bool $private): void
     {
         $key = OpenSslKeyReader::read(OpenSsl::readPem(self::fixturePem($pem), null));
@@ -99,7 +99,7 @@ class OpenSslKeyReaderTest extends TestCase
     /**
      * @return iterable<string, array{Curve, string}>
      */
-    public static function ecCurveProvider(): iterable
+    public static function ecCurves(): iterable
     {
         yield 'P-256' => [Curve::P256, 'prime256v1'];
         yield 'P-384' => [Curve::P384, 'secp384r1'];
@@ -107,7 +107,7 @@ class OpenSslKeyReaderTest extends TestCase
         yield 'secp256k1' => [Curve::Secp256k1, 'secp256k1'];
     }
 
-    #[DataProvider('ecCurveProvider')]
+    #[DataProvider('ecCurves')]
     public function testReadsAGeneratedKeyOnEachEcCurve(Curve $curve, string $curveName): void
     {
         $generated = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => $curveName]);
@@ -125,7 +125,7 @@ class OpenSslKeyReaderTest extends TestCase
     /**
      * @return iterable<string, array{Curve, int}>
      */
-    public static function okpCurveProvider(): iterable
+    public static function okpCurves(): iterable
     {
         yield 'Ed25519' => [Curve::Ed25519, OPENSSL_KEYTYPE_ED25519];
         yield 'Ed448' => [Curve::Ed448, OPENSSL_KEYTYPE_ED448];
@@ -133,7 +133,7 @@ class OpenSslKeyReaderTest extends TestCase
         yield 'X448' => [Curve::X448, OPENSSL_KEYTYPE_X448];
     }
 
-    #[DataProvider('okpCurveProvider')]
+    #[DataProvider('okpCurves')]
     public function testReadsAGeneratedKeyOnEachOkpCurve(Curve $curve, int $keyType): void
     {
         $generated = openssl_pkey_new(['private_key_type' => $keyType]);
@@ -216,7 +216,7 @@ class OpenSslKeyReaderTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function unsupportedKeyProvider(): iterable
+    public static function unsupportedKeys(): iterable
     {
         yield 'DSA' => ['generated/dsa-public.pem', 'The key is a DSA key, which the package does not implement'];
         yield 'DH' => ['generated/dh-public.pem', 'The key is a DH key, which the package does not implement'];
@@ -227,7 +227,7 @@ class OpenSslKeyReaderTest extends TestCase
         ];
     }
 
-    #[DataProvider('unsupportedKeyProvider')]
+    #[DataProvider('unsupportedKeys')]
     public function testRefusesAKeyTypeThePackageDoesNotImplement(string $file, string $message): void
     {
         $key = OpenSsl::readPem(self::fixturePem($file), null);

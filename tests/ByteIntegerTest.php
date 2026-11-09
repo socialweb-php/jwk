@@ -23,7 +23,7 @@ use function strlen;
 
 use const OPENSSL_KEYTYPE_RSA;
 
-class ByteIntegerTest extends TestCase
+final class ByteIntegerTest extends TestCase
 {
     public function testAMinimalIntegerHasNoLeadingZeroByteExceptZeroItself(): void
     {
@@ -47,7 +47,7 @@ class ByteIntegerTest extends TestCase
     /**
      * @return iterable<string, array{string, string, string}>
      */
-    public static function productProvider(): iterable
+    public static function products(): iterable
     {
         yield 'one times one' => ["\x01", "\x01", "\x01"];
         yield 'zero times anything' => ["\x00", "\xff\xff", "\x00"];
@@ -58,7 +58,7 @@ class ByteIntegerTest extends TestCase
         yield 'the factors in either order' => ["\x12\x34\x56", "\xab\xcd", "\x0c\x37\x89\x5a\xde"];
     }
 
-    #[DataProvider('productProvider')]
+    #[DataProvider('products')]
     public function testMultipliesUnsignedIntegers(string $a, string $b, string $expected): void
     {
         $this->assertSame($expected, ByteInteger::multiply($a, $b));

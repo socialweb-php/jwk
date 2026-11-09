@@ -9,7 +9,7 @@ use SocialWeb\Test\Jwk\TestCase;
 
 use function array_map;
 
-class ConversionFailedReasonTest extends TestCase
+final class ConversionFailedReasonTest extends TestCase
 {
     public function testHasTheReasonsOfTheDesign(): void
     {

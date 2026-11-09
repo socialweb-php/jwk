@@ -9,7 +9,7 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\SkippedKey;
 
-class SkippedKeyTest extends TestCase
+final class SkippedKeyTest extends TestCase
 {
     public function testHoldsThePositionAndTheCause(): void
     {

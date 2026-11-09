@@ -7,7 +7,7 @@ namespace SocialWeb\Test\Jwk;
 use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\KeyType;
 
-class KeyTypeTest extends TestCase
+final class KeyTypeTest extends TestCase
 {
     public function testIsBackedByTheRegisteredKtyValues(): void
     {
@@ -22,7 +22,7 @@ class KeyTypeTest extends TestCase
     /**
      * @return iterable<string, array{KeyType, non-empty-list<string>}>
      */
-    public static function privateMemberNamesProvider(): iterable
+    public static function privateMemberNames(): iterable
     {
         yield 'RSA' => [KeyType::Rsa, ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth']];
         yield 'EC' => [KeyType::Ec, ['d']];
@@ -33,7 +33,7 @@ class KeyTypeTest extends TestCase
     /**
      * @param non-empty-list<string> $expected
      */
-    #[DataProvider('privateMemberNamesProvider')]
+    #[DataProvider('privateMemberNames')]
     public function testNamesThePrivateMembers(KeyType $type, array $expected): void
     {
         $this->assertSame($expected, $type->privateMemberNames());

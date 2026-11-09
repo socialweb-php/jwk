@@ -9,7 +9,7 @@ use SocialWeb\Jwk\Exception\AmbiguousKeyId;
 use SocialWeb\Jwk\Exception\JwkException;
 use SocialWeb\Test\Jwk\TestCase;
 
-class AmbiguousKeyIdTest extends TestCase
+final class AmbiguousKeyIdTest extends TestCase
 {
     public function testCanBeCaughtAsAJwkException(): void
     {

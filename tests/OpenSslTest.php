@@ -35,7 +35,7 @@ use const OPENSSL_KEYTYPE_EC;
 use const OPENSSL_KEYTYPE_ED25519;
 use const OPENSSL_KEYTYPE_RSA;
 
-class OpenSslTest extends TestCase
+final class OpenSslTest extends TestCase
 {
     public function testBuildsAKeyFromItsMembers(): void
     {
@@ -114,7 +114,7 @@ class OpenSslTest extends TestCase
     /**
      * @return iterable<string, array{array<string, array<string, string>>}>
      */
-    public static function malformedMembersProvider(): iterable
+    public static function malformedMembers(): iterable
     {
         yield 'no entry' => [[]];
         yield 'two entries' => [['ed25519' => ['pub_key' => 'a'], 'x25519' => ['pub_key' => 'b']]];
@@ -126,7 +126,7 @@ class OpenSslTest extends TestCase
     /**
      * @param array<string, array<string, string>> $members
      */
-    #[DataProvider('malformedMembersProvider')]
+    #[DataProvider('malformedMembers')]
     public function testRefusesMembersThatDescribeNoKey(array $members): void
     {
         $this->expectException(InvalidArgument::class);
@@ -137,7 +137,7 @@ class OpenSslTest extends TestCase
     /**
      * @return iterable<string, array{array<string, array<string, string>>, string}>
      */
-    public static function unreadMembersProvider(): iterable
+    public static function unreadMembers(): iterable
     {
         $scalar = str_repeat("\x01", 32);
 
@@ -170,7 +170,7 @@ class OpenSslTest extends TestCase
     /**
      * @param array<string, array<string, string>> $members
      */
-    #[DataProvider('unreadMembersProvider')]
+    #[DataProvider('unreadMembers')]
     public function testRefusesMembersOpenSslDoesNotRead(array $members, string $message): void
     {
         $this->expectException(InvalidArgument::class);
@@ -238,7 +238,7 @@ class OpenSslTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function badScalarProvider(): iterable
+    public static function badScalars(): iterable
     {
         yield 'zero' => [self::hex('00000000000000000000000000000000' . '00000000000000000000000000000000')];
         yield 'the order of the curve' => [
@@ -246,7 +246,7 @@ class OpenSslTest extends TestCase
         ];
     }
 
-    #[DataProvider('badScalarProvider')]
+    #[DataProvider('badScalars')]
     public function testRefusesAnEcScalarThatOpenSslReplacesWithAGeneratedKey(string $scalar): void
     {
         $fixture = self::fixtureSetMember('rfc7517/appendix-a2.json', 0);
@@ -377,7 +377,7 @@ class OpenSslTest extends TestCase
     /**
      * @return iterable<string, array{string, int}>
      */
-    public static function pemFormProvider(): iterable
+    public static function pemForms(): iterable
     {
         yield 'PKCS #1 RSA PRIVATE KEY' => ['rfc9421/test-key-rsa.private.pem', OPENSSL_KEYTYPE_RSA];
         yield 'PKCS #1 RSA PUBLIC KEY' => ['rfc9421/test-key-rsa.public.pem', OPENSSL_KEYTYPE_RSA];
@@ -390,7 +390,7 @@ class OpenSslTest extends TestCase
         yield 'Ed25519 SubjectPublicKeyInfo' => ['rfc9421/test-key-ed25519.public.pem', OPENSSL_KEYTYPE_ED25519];
     }
 
-    #[DataProvider('pemFormProvider')]
+    #[DataProvider('pemForms')]
     public function testReadsEveryPemFormOpenSslWrites(string $file, int $type): void
     {
         $key = OpenSsl::readPem(self::fixturePem($file), null);
@@ -441,13 +441,13 @@ class OpenSslTest extends TestCase
     /**
      * @return iterable<string, array{bool}>
      */
-    public static function bundleOrderProvider(): iterable
+    public static function bundleOrders(): iterable
     {
         yield 'the certificate first' => [true];
         yield 'the key first' => [false];
     }
 
-    #[DataProvider('bundleOrderProvider')]
+    #[DataProvider('bundleOrders')]
     public function testRefusesAnEncryptedKeyBesideACertificateWithoutItsPassphrase(bool $certificateFirst): void
     {
         /** @var list<string> $chain */
@@ -483,7 +483,7 @@ class OpenSslTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function privateKeyLabelProvider(): iterable
+    public static function privateKeyLabels(): iterable
     {
         yield 'PKCS #8' => ['PRIVATE KEY'];
         yield 'PKCS #8 encrypted' => ['ENCRYPTED PRIVATE KEY'];
@@ -491,7 +491,7 @@ class OpenSslTest extends TestCase
         yield 'SEC 1' => ['EC PRIVATE KEY'];
     }
 
-    #[DataProvider('privateKeyLabelProvider')]
+    #[DataProvider('privateKeyLabels')]
     public function testDoesNotReadTheCertificateBesideAPrivateKeyThatDoesNotRead(string $label): void
     {
         /** @var list<string> $chain */

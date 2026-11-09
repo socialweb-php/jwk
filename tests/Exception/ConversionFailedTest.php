@@ -10,7 +10,7 @@ use SocialWeb\Jwk\Exception\ConversionFailedReason;
 use SocialWeb\Jwk\Exception\JwkException;
 use SocialWeb\Test\Jwk\TestCase;
 
-class ConversionFailedTest extends TestCase
+final class ConversionFailedTest extends TestCase
 {
     public function testCanBeCaughtAsAJwkException(): void
     {

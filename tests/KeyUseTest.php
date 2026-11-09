@@ -7,7 +7,7 @@ namespace SocialWeb\Test\Jwk;
 use SocialWeb\Jwk\KeyOperation;
 use SocialWeb\Jwk\KeyUse;
 
-class KeyUseTest extends TestCase
+final class KeyUseTest extends TestCase
 {
     public function testIsBackedByTheRegisteredUseValues(): void
     {

@@ -10,7 +10,7 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\JwkException;
 use SocialWeb\Test\Jwk\TestCase;
 
-class InvalidArgumentTest extends TestCase
+final class InvalidArgumentTest extends TestCase
 {
     public function testCanBeCaughtAsAJwkException(): void
     {

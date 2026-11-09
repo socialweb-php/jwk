@@ -24,12 +24,12 @@ use function trim;
 
 use const OPENSSL_KEYTYPE_RSA;
 
-class RsaPublicKeyInfoTest extends TestCase
+final class RsaPublicKeyInfoTest extends TestCase
 {
     /**
      * @return iterable<string, array{int}>
      */
-    public static function keySizeProvider(): iterable
+    public static function keySizes(): iterable
     {
         yield '1024 bits' => [1024];
         yield '2048 bits' => [2048];
@@ -37,7 +37,7 @@ class RsaPublicKeyInfoTest extends TestCase
         yield '4096 bits' => [4096];
     }
 
-    #[DataProvider('keySizeProvider')]
+    #[DataProvider('keySizes')]
     public function testEncodesTheSameDerAsOpenSsl(int $bits): void
     {
         $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => $bits]);

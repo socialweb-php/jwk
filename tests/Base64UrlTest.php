@@ -11,7 +11,7 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use function random_bytes;
 use function random_int;
 
-class Base64UrlTest extends TestCase
+final class Base64UrlTest extends TestCase
 {
     public function testEncodesTheRfc7515AppendixCExample(): void
     {
@@ -51,7 +51,7 @@ class Base64UrlTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function refusedProvider(): iterable
+    public static function refusedTexts(): iterable
     {
         yield 'padding' => ['AQAB==', 'The text has a character outside the base64url alphabet'];
         yield 'the standard alphabet plus' => ['A+z/4ME', 'The text has a character outside the base64url alphabet'];
@@ -74,7 +74,7 @@ class Base64UrlTest extends TestCase
         ];
     }
 
-    #[DataProvider('refusedProvider')]
+    #[DataProvider('refusedTexts')]
     public function testRefusesTextThatIsNotCanonicalBase64Url(string $text, string $message): void
     {
         $this->expectException(InvalidArgument::class);

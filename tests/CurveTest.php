@@ -18,12 +18,12 @@ use const OPENSSL_KEYTYPE_RSA;
 use const OPENSSL_KEYTYPE_X25519;
 use const OPENSSL_KEYTYPE_X448;
 
-class CurveTest extends TestCase
+final class CurveTest extends TestCase
 {
     /**
      * @return iterable<string, array{Curve, string, KeyType, int, int, ?string, int, ?string}>
      */
-    public static function curveProvider(): iterable
+    public static function curves(): iterable
     {
         yield 'P-256' => [Curve::P256, 'P-256', KeyType::Ec, 32, 32, 'prime256v1', OPENSSL_KEYTYPE_EC, null];
         yield 'P-384' => [Curve::P384, 'P-384', KeyType::Ec, 48, 48, 'secp384r1', OPENSSL_KEYTYPE_EC, null];
@@ -37,7 +37,7 @@ class CurveTest extends TestCase
         yield 'X448' => [Curve::X448, 'X448', KeyType::Okp, 56, 56, null, OPENSSL_KEYTYPE_X448, 'x448'];
     }
 
-    #[DataProvider('curveProvider')]
+    #[DataProvider('curves')]
     public function testDescribesEachCurve(
         Curve $curve,
         string $crv,
@@ -62,7 +62,7 @@ class CurveTest extends TestCase
      *
      * @return iterable<string, array{Curve, ?string}>
      */
-    public static function orderProvider(): iterable
+    public static function orders(): iterable
     {
         yield 'P-256' => [Curve::P256, 'ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551'];
         yield 'P-384' => [
@@ -81,7 +81,7 @@ class CurveTest extends TestCase
         yield 'X448' => [Curve::X448, null];
     }
 
-    #[DataProvider('orderProvider')]
+    #[DataProvider('orders')]
     public function testGivesTheOrderOfAnEcCurve(Curve $curve, ?string $order): void
     {
         $actual = $curve->order();

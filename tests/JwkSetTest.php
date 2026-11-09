@@ -34,12 +34,12 @@ use function unserialize;
 use const INF;
 use const JSON_THROW_ON_ERROR;
 
-class JwkSetTest extends TestCase
+final class JwkSetTest extends TestCase
 {
     /**
      * @return iterable<string, array{string, list<class-string<Jwk>>, list<?string>}>
      */
-    public static function rfc7517AppendixAProvider(): iterable
+    public static function rfc7517AppendixASets(): iterable
     {
         yield 'A.1, public keys' => ['rfc7517/appendix-a1.json', [EcKey::class, RsaKey::class], ['1', '2011-04-29']];
         yield 'A.2, private keys' => ['rfc7517/appendix-a2.json', [EcKey::class, RsaKey::class], ['1', '2011-04-29']];
@@ -54,7 +54,7 @@ class JwkSetTest extends TestCase
      * @param list<class-string<Jwk>> $classes
      * @param list<?string> $keyIds
      */
-    #[DataProvider('rfc7517AppendixAProvider')]
+    #[DataProvider('rfc7517AppendixASets')]
     public function testParsesTheRfc7517AppendixASets(string $file, array $classes, array $keyIds): void
     {
         $fixture = self::fixture($file);
@@ -142,7 +142,7 @@ class JwkSetTest extends TestCase
     /**
      * @return iterable<string, array{string | array<array-key, mixed> | stdClass, string}>
      */
-    public static function invalidSetProvider(): iterable
+    public static function invalidSets(): iterable
     {
         yield 'malformed text' => ['{"keys":', 'The JSON text does not parse: Syntax error'];
         yield 'a JSON array' => ['[]', 'The JSON value is not an object'];
@@ -177,7 +177,7 @@ class JwkSetTest extends TestCase
     /**
      * @param string | array<array-key, mixed> | stdClass $json
      */
-    #[DataProvider('invalidSetProvider')]
+    #[DataProvider('invalidSets')]
     public function testRefusesASetObjectThatIsNotWellFormed(string | array | stdClass $json, string $message): void
     {
         $this->expectException(InvalidJwkSet::class);
@@ -403,7 +403,7 @@ class JwkSetTest extends TestCase
     /**
      * @return iterable<string, array{array<array-key, mixed>}>
      */
-    public static function notAListOfKeysProvider(): iterable
+    public static function invalidKeyLists(): iterable
     {
         yield 'a keyed array' => [['a' => Jwk::fromJson(['kty' => 'oct', 'k' => 'AQ'])]];
         yield 'a string' => [['not a key']];
@@ -414,7 +414,7 @@ class JwkSetTest extends TestCase
     /**
      * @param array<array-key, mixed> $keys
      */
-    #[DataProvider('notAListOfKeysProvider')]
+    #[DataProvider('invalidKeyLists')]
     public function testTheConstructorRefusesAnythingButAListOfKeys(array $keys): void
     {
         $this->expectException(InvalidJwkSet::class);
@@ -436,7 +436,7 @@ class JwkSetTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason}>
      */
-    public static function refusedAdditionalMemberProvider(): iterable
+    public static function refusedAdditionalMembers(): iterable
     {
         yield 'a string that is not UTF-8' => [['issuer' => "\xff"], InvalidJwkReason::InvalidValue];
         yield 'a number that is not finite' => [['n' => INF], InvalidJwkReason::InvalidValue];
@@ -447,7 +447,7 @@ class JwkSetTest extends TestCase
     /**
      * @param array<string, mixed> $members
      */
-    #[DataProvider('refusedAdditionalMemberProvider')]
+    #[DataProvider('refusedAdditionalMembers')]
     public function testTheConstructorChecksTheAdditionalMembersAsAKeyDoes(
         array $members,
         InvalidJwkReason $reason,

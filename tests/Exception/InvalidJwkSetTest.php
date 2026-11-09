@@ -10,7 +10,7 @@ use SocialWeb\Jwk\Exception\JwkException;
 use SocialWeb\Test\Jwk\TestCase;
 use UnexpectedValueException;
 
-class InvalidJwkSetTest extends TestCase
+final class InvalidJwkSetTest extends TestCase
 {
     public function testCanBeCaughtAsAJwkException(): void
     {

@@ -32,7 +32,7 @@ use function substr;
 use const OPENSSL_ALGO_SHA256;
 use const OPENSSL_KEYTYPE_RSA;
 
-class RsaKeyTest extends TestCase
+final class RsaKeyTest extends TestCase
 {
     private const string RFC7638_THUMBPRINT = 'NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs';
 
@@ -127,13 +127,13 @@ class RsaKeyTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function privateKeyFixtureProvider(): iterable
+    public static function privateKeyFixtures(): iterable
     {
         yield 'RFC 7517 appendix C.1' => ['rfc7517/appendix-c1.json'];
         yield 'RFC 7520 section 3.4' => ['rfc7520/section-3.4.json'];
     }
 
-    #[DataProvider('privateKeyFixtureProvider')]
+    #[DataProvider('privateKeyFixtures')]
     public function testParsesAndWritesBackAPrivateKeyFixture(string $file): void
     {
         $fixture = self::fixture($file);
@@ -248,7 +248,7 @@ class RsaKeyTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string}>
      */
-    public static function refusedProvider(): iterable
+    public static function refusedKeys(): iterable
     {
         $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
         $other = self::fixture('rfc7520/section-3.4.json');
@@ -390,7 +390,7 @@ class RsaKeyTest extends TestCase
     /**
      * @return iterable<string, array{array<string, mixed>, InvalidJwkReason, string}>
      */
-    public static function otherPrimeEntryProvider(): iterable
+    public static function otherPrimeEntries(): iterable
     {
         yield 'a missing r' => [
             ['d' => 'AQ', 't' => 'AQ'],
@@ -433,7 +433,7 @@ class RsaKeyTest extends TestCase
     /**
      * @param array<string, mixed> $entry
      */
-    #[DataProvider('otherPrimeEntryProvider')]
+    #[DataProvider('otherPrimeEntries')]
     public function testAnErrorInAnOthEntryNamesOthAndThePosition(
         array $entry,
         InvalidJwkReason $reason,
@@ -456,7 +456,7 @@ class RsaKeyTest extends TestCase
     /**
      * @return iterable<string, array{array<array-key, mixed>}>
      */
-    public static function wrongOtherPrimesProvider(): iterable
+    public static function wrongOtherPrimes(): iterable
     {
         yield 'an entry that is not an OtherPrimeInfo' => [['AQ']];
         yield 'entries that are not a list' => [[1 => new OtherPrimeInfo("\x03", "\x01", "\x01")]];
@@ -468,7 +468,7 @@ class RsaKeyTest extends TestCase
      *
      * @param array<array-key, mixed> $otherPrimesInfo
      */
-    #[DataProvider('wrongOtherPrimesProvider')]
+    #[DataProvider('wrongOtherPrimes')]
     public function testTheConstructorChecksTheOtherPrimesAsParsingDoes(array $otherPrimesInfo): void
     {
         $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
@@ -526,7 +526,7 @@ class RsaKeyTest extends TestCase
     /**
      * @return iterable<string, array{int, int, string}>
      */
-    public static function primeLengthProvider(): iterable
+    public static function primeLengths(): iterable
     {
         $tooLong = 'The prime factors are too long to multiply to the "n" member';
         $tooShort = 'The prime factors are too short to multiply to the "n" member';
@@ -544,7 +544,7 @@ class RsaKeyTest extends TestCase
      * the product of two minimal factors of 129 and 128 bytes is 256 or 257
      * bytes long
      */
-    #[DataProvider('primeLengthProvider')]
+    #[DataProvider('primeLengths')]
     public function testRefusesPrimesWhoseLengthsCannotGiveTheModulus(
         int $firstLength,
         int $secondLength,
@@ -584,7 +584,7 @@ class RsaKeyTest extends TestCase
     /**
      * @param array<string, mixed> $jwk
      */
-    #[DataProvider('refusedProvider')]
+    #[DataProvider('refusedKeys')]
     public function testRefusesAMalformedKey(array $jwk, InvalidJwkReason $reason, string $member): void
     {
         try {
