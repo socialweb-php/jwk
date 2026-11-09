@@ -105,8 +105,20 @@ if ($manifest['sets'] === []) {
 
 $failed = false;
 
-/** @var array{name: string, sha256: string} $set */
-foreach ($manifest['sets'] as $set) {
+foreach ($manifest['sets'] as $index => $set) {
+    if (
+        !is_array($set)
+        || !isset($set['name'], $set['sha256'])
+        || !is_string($set['name'])
+        || !is_string($set['sha256'])
+    ) {
+        $fail(sprintf(
+            '%s: entry %d of the "sets" list needs a string "name" and a string "sha256"',
+            $manifestFile,
+            $index,
+        ));
+    }
+
     $base = $resourcesDirectory . '/' . $set['name'];
 
     if (!is_dir($base)) {
@@ -117,7 +129,13 @@ foreach ($manifest['sets'] as $set) {
     $lines = '';
 
     foreach ($files as $file) {
-        $lines .= hash_file('sha256', $base . substr($file, 1)) . '  ' . $file . "\n";
+        $hash = @hash_file('sha256', $base . substr($file, 1));
+
+        if ($hash === false) {
+            $fail(sprintf('%s: cannot read %s', $set['name'], $base . substr($file, 1)));
+        }
+
+        $lines .= $hash . '  ' . $file . "\n";
     }
 
     $checksum = hash('sha256', $lines);
