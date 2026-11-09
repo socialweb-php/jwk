@@ -7,6 +7,7 @@ namespace SocialWeb\Test\Jwk;
 use DateTimeImmutable;
 use JsonSerializable;
 use PHPUnit\Framework\Attributes\DataProvider;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\JsonValue;
@@ -19,6 +20,7 @@ use function get_debug_type;
 use function get_object_vars;
 use function ini_set;
 use function json_encode;
+use function sprintf;
 
 use const INF;
 use const JSON_PRESERVE_ZERO_FRACTION;
@@ -99,34 +101,24 @@ final class JsonValueTest extends TestCase
     {
         yield 'a string that is not UTF-8' => [
             "\xff",
-            InvalidJwkReason::InvalidValue,
+            InvalidJwkReason::MalformedJson,
             'The "m" member holds a string that is not valid UTF-8',
         ];
         yield 'a nested string that is not UTF-8' => [
             ['a' => ['ok', "\xc3"]],
-            InvalidJwkReason::InvalidValue,
+            InvalidJwkReason::MalformedJson,
             'The "m" member holds a string that is not valid UTF-8',
         ];
-        yield 'infinity' => [INF, InvalidJwkReason::InvalidValue, 'The "m" member holds a number that is not finite'];
+        yield 'infinity' => [INF, InvalidJwkReason::MalformedJson, 'The "m" member holds a number that is not finite'];
         yield 'negative infinity' => [
             [-INF],
-            InvalidJwkReason::InvalidValue,
+            InvalidJwkReason::MalformedJson,
             'The "m" member holds a number that is not finite',
         ];
         yield 'not a number' => [
             (object) ['a' => NAN],
-            InvalidJwkReason::InvalidValue,
+            InvalidJwkReason::MalformedJson,
             'The "m" member holds a number that is not finite',
-        ];
-        yield 'an object other than stdClass' => [
-            new DateTimeImmutable(),
-            InvalidJwkReason::WrongType,
-            'The "m" member holds a value that is not a JSON value: DateTimeImmutable',
-        ];
-        yield 'a closure in a list' => [
-            [static fn (): int => 1],
-            InvalidJwkReason::WrongType,
-            'The "m" member holds a value that is not a JSON value: Closure',
         ];
         yield 'a nested name that is not UTF-8' => [
             [['ok' => 1, "\xff" => 1]],
@@ -163,17 +155,40 @@ final class JsonValueTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function valuesOfATypeJsonCannotHold(): iterable
+    {
+        yield 'an object other than stdClass' => [new DateTimeImmutable(), 'DateTimeImmutable'];
+        yield 'a closure in a list' => [[static fn (): int => 1], 'Closure'];
+        yield 'an enum case in an object' => [(object) ['a' => KeyUse::Signature], KeyUse::class];
+    }
+
+    #[DataProvider('valuesOfATypeJsonCannotHold')]
+    public function testRefusesAValueOfATypeJsonCannotHoldAsACallersMistake(mixed $value, string $type): void
+    {
+        try {
+            JsonValue::read('m', $value);
+            $this->fail('Expected InvalidArgument');
+        } catch (InvalidArgument $exception) {
+            $this->assertSame(
+                sprintf('The "m" member holds a value of type %s, which cannot be read as JSON', $type),
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testRefusesAResource(): void
     {
         $resource = fopen('php://memory', 'r');
 
         try {
             JsonValue::read('m', ['a' => $resource]);
-            $this->fail('Expected InvalidJwk');
-        } catch (InvalidJwk $exception) {
-            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
+            $this->fail('Expected InvalidArgument');
+        } catch (InvalidArgument $exception) {
             $this->assertSame(
-                'The "m" member holds a value that is not a JSON value: resource (stream)',
+                'The "m" member holds a value of type resource (stream), which cannot be read as JSON',
                 $exception->getMessage(),
             );
         } finally {
@@ -181,6 +196,95 @@ final class JsonValueTest extends TestCase
                 fclose($resource);
             }
         }
+    }
+
+    public function testCheckTypesRefusesAValueJsonCannotHoldAtAnyDepth(): void
+    {
+        $resource = fopen('php://memory', 'r');
+        $values = [
+            'at the top' => [new DateTimeImmutable(), 'DateTimeImmutable'],
+            'in a list' => [[1, [2, [static fn (): int => 3]]], 'Closure'],
+            'in an object' => [(object) ['a' => (object) ['b' => KeyUse::Signature]], KeyUse::class],
+            'a stdClass subclass' => [
+                ['a' => new class extends stdClass {
+                },
+                ],
+                'stdClass@anonymous',
+            ],
+            'a resource' => [['a' => $resource], 'resource (stream)'],
+        ];
+
+        try {
+            foreach ($values as $label => [$value, $type]) {
+                try {
+                    JsonValue::checkTypes($value);
+                    $this->fail('Expected InvalidArgument for ' . $label);
+                } catch (InvalidArgument $exception) {
+                    $this->assertSame(
+                        sprintf('A value of type %s cannot be read as JSON', $type),
+                        $exception->getMessage(),
+                        $label,
+                    );
+                }
+            }
+        } finally {
+            if ($resource !== false) {
+                fclose($resource);
+            }
+        }
+    }
+
+    public function testCheckTypesWalksEveryJsonTypeAndStopsAtTheDepthReadRefuses(): void
+    {
+        $value = ['a' => null, 'b' => [true, false, 1, 1.5, 'é'], 'c' => (object) ['d' => [new stdClass()]]];
+
+        for ($level = 1; $level < 600; $level++) {
+            $value = ['deep' => $value];
+        }
+
+        JsonValue::checkTypes($value);
+        $cyclic = new stdClass();
+        $cyclic->self = $cyclic;
+        JsonValue::checkTypes($cyclic);
+
+        $this->expectException(InvalidJwk::class);
+
+        JsonValue::read('m', $value);
+    }
+
+    public function testCheckTypesWalksExactlyAsDeepAsReadReads(): void
+    {
+        $closure = static fn (): int => 1;
+        $atTheDeepestLevelRead = [$closure];
+        $oneLevelDeeper = [$closure];
+
+        for ($level = 2; $level <= JsonValue::MAX_DEPTH; $level++) {
+            $atTheDeepestLevelRead = [$atTheDeepestLevelRead];
+            $oneLevelDeeper = [$oneLevelDeeper];
+        }
+
+        $oneLevelDeeper = [$oneLevelDeeper];
+        JsonValue::checkTypes($oneLevelDeeper);
+
+        try {
+            JsonValue::read('m', $oneLevelDeeper);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+        }
+
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A value of type Closure cannot be read as JSON');
+
+        JsonValue::checkTypes($atTheDeepestLevelRead);
+    }
+
+    public function testReadMembersFindsATypeJsonCannotHoldBeforeReadingAnyMember(): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A value of type Closure cannot be read as JSON');
+
+        JsonValue::readMembers(['a' => "\xff", 'b' => static fn (): int => 1]);
     }
 
     /**
@@ -266,12 +370,13 @@ final class JsonValueTest extends TestCase
         foreach ([$object, [$object], (object) ['a' => $object]] as $value) {
             try {
                 JsonValue::read('m', $value);
-                $this->fail('Expected InvalidJwk');
-            } catch (InvalidJwk $exception) {
-                $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
-                $this->assertSame('m', $exception->member);
+                $this->fail('Expected InvalidArgument');
+            } catch (InvalidArgument $exception) {
                 $this->assertSame(
-                    'The "m" member holds a value that is not a JSON value: ' . get_debug_type($object),
+                    sprintf(
+                        'The "m" member holds a value of type %s, which cannot be read as JSON',
+                        get_debug_type($object),
+                    ),
                     $exception->getMessage(),
                 );
             }
@@ -327,11 +432,6 @@ final class JsonValueTest extends TestCase
     {
         yield 'a PHP list' => [[1, 2]];
         yield 'an empty PHP array' => [[]];
-        yield 'a subclass of stdClass' => [
-            new class extends stdClass {
-                public string $kty = 'oct';
-            },
-        ];
     }
 
     /**
@@ -348,6 +448,16 @@ final class JsonValueTest extends TestCase
             $this->assertNull($exception->member);
             $this->assertSame('The JSON value is not an object', $exception->getMessage());
         }
+    }
+
+    public function testReadMembersRefusesAStdClassSubclassAsACallersMistake(): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A value of type stdClass@anonymous cannot be read as JSON');
+
+        JsonValue::readMembers(new class extends stdClass {
+            public string $kty = 'oct';
+        });
     }
 
     public function testReadMembersReadsAnArrayThatIsNotAListAndAStdClass(): void

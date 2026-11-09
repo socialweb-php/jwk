@@ -35,7 +35,11 @@ namespace SocialWeb\Jwk\Exception;
 enum InvalidJwkReason
 {
     /**
-     * The JSON text does not parse, or has content after the object
+     * The JSON text does not parse or has content after the object, or a
+     * decoded value holds content JSON text cannot express: a string or a
+     * member name that is not valid UTF-8, a member name that starts with a
+     * NUL byte, a number that is not finite, or nesting deeper than
+     * `json_decode()` reads
      */
     case MalformedJson;
 
@@ -80,7 +84,8 @@ enum InvalidJwkReason
 
     /**
      * A member has a value the key type gives no meaning: a modulus of
-     * zero, an empty key identifier, an empty symmetric key
+     * zero, an empty key identifier, an empty symmetric key, a public key
+     * OpenSSL cannot read
      */
     case InvalidValue;
 

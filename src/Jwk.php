@@ -67,7 +67,7 @@ use const JSON_UNESCAPED_SLASHES;
  * Every string a key holds is valid UTF-8 and every number is finite, so
  * that every key can be written as JSON text. A constructor or `with`
  * method given a string that is not valid UTF-8 throws `InvalidJwk` with
- * the reason `InvalidValue` naming the member.
+ * the reason `MalformedJson` naming the member, as parsing does.
  */
 abstract readonly class Jwk implements JsonSerializable
 {
@@ -113,8 +113,10 @@ abstract readonly class Jwk implements JsonSerializable
      *     `stdClass` or a PHP array that is not a list, and a JSON array is
      *     a PHP list
      *
-     * @throws InvalidArgument when an additional member is named after a member
-     *     the key type defines
+     * @throws InvalidArgument when `keyOperations` or `certificateChain`
+     *     is not a list of the right type, when an additional member is
+     *     named after a member the key type defines, or when an additional
+     *     member holds a value of a PHP type that is not a JSON type
      */
     protected function __construct(
         public ?string $keyId,
@@ -127,6 +129,7 @@ abstract readonly class Jwk implements JsonSerializable
         public ?string $certificateSha256Thumbprint,
         array $additionalMembers,
     ) {
+        JsonValue::checkTypes($additionalMembers);
         $members = [];
 
         /** @var mixed $value */
@@ -141,25 +144,31 @@ abstract readonly class Jwk implements JsonSerializable
     }
 
     /**
-     * Parses a JWK from JSON text or from a value the text was already
-     * decoded into, and returns the key class for its `kty`
+     * Parses a JWK from JSON text, from a value the text was already decoded
+     * into, or from a `JsonSerializable`, and returns the key class for its
+     * `kty`
      *
      * A decoded value is an array or a tree of `stdClass` objects, as
      * `json_decode()` gives either. In an array, a PHP array that is a
      * list, including an empty array, is a JSON array, and any other PHP
-     * array is a JSON object.
+     * array is a JSON object. A `JsonSerializable` is read as what its
+     * `jsonSerialize()` returns, so a key is read from another key, which
+     * gives an equal key.
      *
      * With `$publicOnly`, a key with a private member is refused with the
      * reason `PrivateMembersPresent`, and an `oct` key with `SymmetricKey`,
      * since a symmetric key is never public.
      *
-     * @param string | array<array-key, mixed> | stdClass $json
+     * @param array<array-key, mixed> | string | JsonSerializable | stdClass $json
      *
+     * @throws InvalidArgument for a value whose PHP type is not a JSON type
+     *     at any depth, such as an object of a class other than `stdClass`,
+     *     a closure, or a resource, before any member is read
      * @throws InvalidJwk when the input is not a well-formed JWK of a type
      *     the package implements; the reason says which rule it broke
      */
     public static function fromJson(
-        #[SensitiveParameter] string | array | stdClass $json,
+        #[SensitiveParameter] array | string | JsonSerializable | stdClass $json,
         bool $publicOnly = false,
     ): RsaKey | EcKey | OkpKey | OctKey {
         $members = MemberReader::fromJson($json);
@@ -364,7 +373,8 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `kid` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `InvalidValue` for an empty string, which
-     *     RFC 7517 gives no meaning, or for a string that is not valid UTF-8
+     *     RFC 7517 gives no meaning, or with `MalformedJson` for a string
+     *     that is not valid UTF-8
      */
     public function withKeyId(?string $keyId): static
     {
@@ -375,7 +385,7 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `alg` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `AlgorithmDoesNotFitKey` for a registered
-     *     algorithm the key cannot run, or with `InvalidValue` for a string
+     *     algorithm the key cannot run, or with `MalformedJson` for a string
      *     that is not valid UTF-8
      */
     public function withAlgorithm(?string $algorithm): static
@@ -387,7 +397,7 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `use` member replaced, or removed for `null`
      *
      * @throws InvalidJwk with `InconsistentUseAndKeyOperations` when the
-     *     use disagrees with the key's operations, or with `InvalidValue`
+     *     use disagrees with the key's operations, or with `MalformedJson`
      *     for a string that is not valid UTF-8
      */
     public function withUse(KeyUse | string | null $use): static
@@ -401,9 +411,11 @@ abstract readonly class Jwk implements JsonSerializable
      *
      * @param list<KeyOperation | string> $keyOperations
      *
+     * @throws InvalidArgument when the operations are not a list of strings
+     *     and `KeyOperation` cases
      * @throws InvalidJwk with `DuplicateKeyOperation` for a repeated
      *     operation; with `InconsistentUseAndKeyOperations` when an
-     *     operation disagrees with the key's use; or with `InvalidValue`
+     *     operation disagrees with the key's use; or with `MalformedJson`
      *     for an operation that is not valid UTF-8
      */
     public function withKeyOperations(array $keyOperations): static
@@ -414,7 +426,7 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * Returns the key with the `x5u` member replaced, or removed for `null`
      *
-     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
+     * @throws InvalidJwk with `MalformedJson` for a string that is not valid
      *     UTF-8
      */
     public function withCertificateUrl(?string $certificateUrl): static
@@ -428,8 +440,8 @@ abstract readonly class Jwk implements JsonSerializable
      *
      * @param list<string> $certificateChain
      *
-     * @throws InvalidJwk with `WrongType` when the chain is not a list of
-     *     strings, with `InvalidValue` for a string that is not valid
+     * @throws InvalidArgument when the chain is not a list of strings
+     * @throws InvalidJwk with `MalformedJson` for a string that is not valid
      *     UTF-8, or with `InvalidCertificate`, `CertificateKeyMismatch`, or
      *     `CertificateThumbprintMismatch` as the certificate members require
      */
@@ -441,7 +453,7 @@ abstract readonly class Jwk implements JsonSerializable
     /**
      * Returns the key with the `x5t` member replaced, or removed for `null`
      *
-     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
+     * @throws InvalidJwk with `MalformedJson` for a string that is not valid
      *     UTF-8, or with `InvalidCertificate`, `CertificateKeyMismatch`, or
      *     `CertificateThumbprintMismatch` as the certificate members require
      */
@@ -454,7 +466,7 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the key with the `x5t#S256` member replaced, or removed for
      * `null`
      *
-     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
+     * @throws InvalidJwk with `MalformedJson` for a string that is not valid
      *     UTF-8, or with `InvalidCertificate`, `CertificateKeyMismatch`, or
      *     `CertificateThumbprintMismatch` as the certificate members require
      */
@@ -496,18 +508,18 @@ abstract readonly class Jwk implements JsonSerializable
      * any other PHP array is a JSON object, which the key keeps as a
      * `stdClass`.
      *
-     * @throws InvalidArgument when the name is one the package defines for
-     *     this key, which the typed members hold instead
-     * @throws InvalidJwk when the name or the value is one JSON text cannot
-     *     hold, as `fromJson()` refuses it: with `MalformedJson` for a member
-     *     name that starts with a NUL byte or is not valid UTF-8, or for
-     *     nesting deeper than `json_decode()` reads; with `InvalidValue`
-     *     naming the member for a string that is not valid UTF-8 or a number
-     *     that is not finite; or with `WrongType` naming the member for a
-     *     value of a PHP type that is not a JSON type
+     * @throws InvalidArgument when the value holds, at any depth, a value of
+     *     a PHP type that is not a JSON type, or when the name is one the
+     *     package defines for this key, which the typed members hold instead
+     * @throws InvalidJwk with `MalformedJson` when the name or the value is
+     *     one JSON text cannot hold, as `fromJson()` refuses it: a member
+     *     name that starts with a NUL byte or is not valid UTF-8, nesting
+     *     deeper than `json_decode()` reads, or, naming the member, a string
+     *     that is not valid UTF-8 or a number that is not finite
      */
     public function withAdditionalMember(string $name, mixed $value): static
     {
+        JsonValue::checkTypes($value);
         $this->checkAdditionalMemberName($name);
 
         $members = $this->additionalMembers;
@@ -680,19 +692,19 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the operations as the strings the member holds
      *
      * The type of the list is checked here, before the list is rebuilt,
-     * so that a key built in code is refused as a parsed one is.
+     * since the parameter's type cannot say what the list holds.
      *
      * @param list<KeyOperation | string> $keyOperations
      *
      * @return list<string>
      *
-     * @throws InvalidJwk with `WrongType` when the operations are not a
-     *     list of strings and `KeyOperation` cases
+     * @throws InvalidArgument when the operations are not a list of strings
+     *     and `KeyOperation` cases
      */
     protected static function normalizeKeyOperations(array $keyOperations): array
     {
         if (!array_is_list($keyOperations)) {
-            throw self::notAStringList('key_ops');
+            throw new InvalidArgument('keyOperations must be a list of strings or KeyOperation cases');
         }
 
         $operations = [];
@@ -703,7 +715,7 @@ abstract readonly class Jwk implements JsonSerializable
             }
 
             if (!is_string($operation)) {
-                throw self::notAStringList('key_ops');
+                throw new InvalidArgument('keyOperations must be a list of strings or KeyOperation cases');
             }
 
             $operations[] = $operation;
@@ -716,19 +728,21 @@ abstract readonly class Jwk implements JsonSerializable
      * Applies the rules of RFC 7517 sections 4.3 to 4.5 to the common
      * members, as parsing and the `with` methods both do
      *
-     * @throws InvalidJwk
-     * @throws InvalidArgument when an additional member is named after a member
-     *     the key type defines
+     * @throws InvalidArgument when the certificate chain is not a list of
+     *     strings
+     * @throws InvalidJwk with `MalformedJson`, `InvalidValue`,
+     *     `DuplicateKeyOperation`, `InconsistentUseAndKeyOperations`,
+     *     `AlgorithmDoesNotFitKey`, or as `checkCertificateMembers()` does
      */
     private function checkCommonMembers(): void
     {
         if (!array_is_list($this->certificateChain)) {
-            throw self::notAStringList('x5c');
+            throw new InvalidArgument('certificateChain must be a list of strings');
         }
 
         foreach ($this->certificateChain as $certificate) {
             if (!is_string($certificate)) {
-                throw self::notAStringList('x5c');
+                throw new InvalidArgument('certificateChain must be a list of strings');
             }
         }
 
@@ -980,15 +994,6 @@ abstract readonly class Jwk implements JsonSerializable
         return $curve === null
             ? sprintf('an %s key', $this->keyType()->value)
             : sprintf('an %s key on the curve %s', $this->keyType()->value, $curve->value);
-    }
-
-    private static function notAStringList(string $member): InvalidJwk
-    {
-        return new InvalidJwk(
-            InvalidJwkReason::WrongType,
-            sprintf('The "%s" member must be a list of strings', $member),
-            $member,
-        );
     }
 
     /**

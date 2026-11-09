@@ -26,6 +26,7 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use SensitiveParameter;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use stdClass;
@@ -38,6 +39,7 @@ use function is_array;
 use function is_finite;
 use function is_float;
 use function is_int;
+use function is_scalar;
 use function is_string;
 use function preg_match;
 use function sprintf;
@@ -55,11 +57,15 @@ use function str_starts_with;
  * caller.
  *
  * Reading refuses what JSON cannot hold, so that every key the package
- * accepts can be written as JSON text: a string or a member name that is
- * not valid UTF-8, a member name that starts with a NUL byte, which PHP
- * does not keep as a property name, a number that is not finite, a value
- * of a PHP type that is not a JSON type, and nesting deeper than
- * `json_decode()` reads.
+ * accepts can be written as JSON text. A value of a PHP type that is not a
+ * JSON type, such as an object of a class other than `stdClass`, a
+ * closure, or a resource, is the caller's mistake and is refused as
+ * `InvalidArgument` before any member is read. A value of a JSON type
+ * whose content JSON text cannot express is a malformed document and is
+ * refused as `InvalidJwk` with `MalformedJson`: a string or a member name
+ * that is not valid UTF-8, a member name that starts with a NUL byte, which
+ * PHP does not keep as a property name, a number that is not finite, and
+ * nesting deeper than `json_decode()` reads.
  *
  * @internal
  */
@@ -70,7 +76,7 @@ final class JsonValue
      * at its default depth of 512, which counts the values inside the
      * innermost container as one more level
      */
-    private const int MAX_DEPTH = 511;
+    public const int MAX_DEPTH = 511;
 
     /**
      * Returns the members of a JSON object, each value read as `read()`
@@ -80,13 +86,16 @@ final class JsonValue
      *
      * @return array<string, mixed>
      *
+     * @throws InvalidArgument as `checkTypes()` does, before any member is
+     *     read
      * @throws InvalidJwk with `NotAnObject` for a PHP list, which is a JSON
-     *     array, or for an object whose class is not `stdClass`; otherwise
-     *     as `checkName()` and `read()` do
+     *     array; otherwise as `checkName()` and `read()` do
      */
     public static function readMembers(#[SensitiveParameter] array | stdClass $object): array
     {
-        if (is_array($object) ? array_is_list($object) : $object::class !== stdClass::class) {
+        self::checkTypes($object);
+
+        if (is_array($object) && array_is_list($object)) {
             throw new InvalidJwk(InvalidJwkReason::NotAnObject, 'The JSON value is not an object');
         }
 
@@ -113,13 +122,12 @@ final class JsonValue
      * @param string $member The name of the member that holds the value,
      *     which every refusal names
      *
-     * @throws InvalidJwk with `InvalidValue` for a string that is not valid
-     *     UTF-8 or a number that is not finite; with `WrongType` for a
-     *     value of a PHP type that is not a JSON type, including an object
-     *     whose class is not `stdClass`; or with `MalformedJson` for a
-     *     member name that `checkName()` refuses or, naming the member, for
-     *     objects and arrays nested deeper than `json_decode()` reads JSON
-     *     text
+     * @throws InvalidArgument for a value of a PHP type that is not a JSON
+     *     type, including an object whose class is not `stdClass`
+     * @throws InvalidJwk with `MalformedJson`, naming the member, for a
+     *     string that is not valid UTF-8, a number that is not finite, a
+     *     member name that `checkName()` refuses, or objects and arrays
+     *     nested deeper than `json_decode()` reads JSON text
      */
     public static function read(string $member, #[SensitiveParameter] mixed $value): mixed
     {
@@ -165,11 +173,49 @@ final class JsonValue
      * Checks that the value of a member is a JSON value that JSON text can
      * hold, as `read()` does
      *
+     * @throws InvalidArgument as `read()` does
      * @throws InvalidJwk as `read()` does
      */
     public static function check(string $member, #[SensitiveParameter] mixed $value): void
     {
         self::read($member, $value);
+    }
+
+    /**
+     * Checks that every value in a tree has a PHP type JSON can hold, before
+     * any of it is read, so that a caller's mistake is reported as one and
+     * not as a fault of the document
+     *
+     * The JSON types are `null`, booleans, integers, floats, strings, PHP
+     * arrays, and `stdClass` objects whose class is `stdClass` itself.
+     * Nesting deeper than `json_decode()` reads is not walked; `read()`
+     * refuses it.
+     *
+     * @throws InvalidArgument naming the type of the first value found
+     *     whose PHP type is not a JSON type
+     */
+    public static function checkTypes(#[SensitiveParameter] mixed $value): void
+    {
+        $pending = [[$value, 1]];
+
+        while (($next = array_pop($pending)) !== null) {
+            [$current, $depth] = $next;
+
+            if (is_array($current) || ($current instanceof stdClass && $current::class === stdClass::class)) {
+                if ($depth > self::MAX_DEPTH) {
+                    continue;
+                }
+
+                /** @var mixed $entry */
+                foreach (is_array($current) ? $current : get_object_vars($current) as $entry) {
+                    $pending[] = [$entry, $depth + 1];
+                }
+            } elseif ($current !== null && !is_scalar($current)) {
+                throw new InvalidArgument(
+                    sprintf('A value of type %s cannot be read as JSON', get_debug_type($current)),
+                );
+            }
+        }
     }
 
     /**
@@ -222,14 +268,17 @@ final class JsonValue
     }
 
     /**
-     * @throws InvalidJwk
+     * @throws InvalidArgument for a value of a PHP type that is not a JSON
+     *     type
+     * @throws InvalidJwk with `MalformedJson` for a string that is not
+     *     valid UTF-8 or a number that is not finite
      */
     private static function checkScalar(string $member, #[SensitiveParameter] mixed $value): void
     {
         if (is_string($value)) {
             if (preg_match('//u', $value) !== 1) {
                 throw new InvalidJwk(
-                    InvalidJwkReason::InvalidValue,
+                    InvalidJwkReason::MalformedJson,
                     sprintf('The "%s" member holds a string that is not valid UTF-8', $member),
                     $member,
                 );
@@ -241,7 +290,7 @@ final class JsonValue
         if (is_float($value)) {
             if (!is_finite($value)) {
                 throw new InvalidJwk(
-                    InvalidJwkReason::InvalidValue,
+                    InvalidJwkReason::MalformedJson,
                     sprintf('The "%s" member holds a number that is not finite', $member),
                     $member,
                 );
@@ -251,11 +300,11 @@ final class JsonValue
         }
 
         if ($value !== null && $value !== true && $value !== false && !is_int($value)) {
-            throw new InvalidJwk(
-                InvalidJwkReason::WrongType,
-                sprintf('The "%s" member holds a value that is not a JSON value: %s', $member, get_debug_type($value)),
+            throw new InvalidArgument(sprintf(
+                'The "%s" member holds a value of type %s, which cannot be read as JSON',
                 $member,
-            );
+                get_debug_type($value),
+            ));
         }
     }
 }

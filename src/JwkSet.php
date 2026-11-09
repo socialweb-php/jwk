@@ -97,12 +97,15 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
      *     or when an additional member holds a value JSON text cannot hold,
      *     as `Jwk::fromJson()` refuses it; the refusal is the previous
      *     exception
-     * @throws InvalidArgument when an additional member is named `keys`
+     * @throws InvalidArgument when an additional member is named `keys`, or
+     *     holds a value of a PHP type that is not a JSON type
      */
     public function __construct(
         private array $keys,
         array $additionalMembers = [],
     ) {
+        JsonValue::checkTypes($additionalMembers);
+
         if (!array_is_list($keys)) {
             throw new InvalidJwkSet('The keys must be a list of Jwk objects');
         }

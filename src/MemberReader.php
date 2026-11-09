@@ -26,6 +26,7 @@ declare(strict_types=1);
 namespace SocialWeb\Jwk;
 
 use JsonException;
+use JsonSerializable;
 use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
@@ -33,9 +34,11 @@ use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use stdClass;
 
 use function array_key_exists;
+use function get_debug_type;
 use function get_object_vars;
 use function in_array;
 use function is_array;
+use function is_object;
 use function is_string;
 use function json_decode;
 use function sprintf;
@@ -72,8 +75,10 @@ final class MemberReader
     }
 
     /**
-     * Reads a JSON object from JSON text or from a value that JSON text was
-     * already decoded into, as an array or as a tree of `stdClass` objects
+     * Reads a JSON object from JSON text, from a value that JSON text was
+     * already decoded into, as an array or as a tree of `stdClass` objects,
+     * or from a `JsonSerializable`, which is read as what its
+     * `jsonSerialize()` returns
      *
      * PHP's parser keeps the lexically last of two members with one name,
      * which is one of the two behaviors RFC 7517 section 4 allows.
@@ -85,18 +90,25 @@ final class MemberReader
      * other PHP array is a JSON object. A decoded value may nest objects and
      * arrays only as deep as `json_decode()` reads JSON text.
      *
-     * @param string | array<array-key, mixed> | stdClass $json
+     * @param array<array-key, mixed> | string | JsonSerializable | stdClass $json
      *
+     * @throws InvalidArgument for a value whose PHP type is not a JSON type,
+     *     at any depth: an object of a class other than `stdClass`, a
+     *     `stdClass` subclass among them, a closure, or a resource; it is
+     *     raised before any member is read
      * @throws InvalidJwk with `MalformedJson` when the text does not parse,
-     *     the value nests too deep, or a member name starts with a NUL byte
-     *     or is not valid UTF-8; with `NotAnObject` when the value is not a
-     *     JSON object; with `InvalidValue` naming the member for a string
-     *     that is not valid UTF-8 or a number that is not finite; or with
-     *     `WrongType` naming the member for a value of a PHP type that is
-     *     not a JSON type
+     *     the value nests too deep, a member name starts with a NUL byte or
+     *     is not valid UTF-8, or, naming the member, a string is not valid
+     *     UTF-8 or a number is not finite; or with `NotAnObject` when the
+     *     value is not a JSON object
      */
-    public static function fromJson(#[SensitiveParameter] string | array | stdClass $json): self
+    public static function fromJson(#[SensitiveParameter] array | string | JsonSerializable | stdClass $json): self
     {
+        if ($json instanceof JsonSerializable) {
+            /** @var mixed $json */
+            $json = $json->jsonSerialize();
+        }
+
         if (is_string($json)) {
             try {
                 /** @var mixed $json */
@@ -107,6 +119,10 @@ final class MemberReader
                     'The JSON text does not parse: ' . $exception->getMessage(),
                 );
             }
+        }
+
+        if (is_object($json) && !$json instanceof stdClass) {
+            throw new InvalidArgument(sprintf('A value of type %s cannot be read as JSON', get_debug_type($json)));
         }
 
         if (!$json instanceof stdClass && !is_array($json)) {

@@ -95,12 +95,11 @@ final readonly class RsaKey extends Jwk
      *     than the modulus, or for a prime of 1; with
      *     `InconsistentPrivateMembers` when the primes and CRT values are
      *     neither all present nor all absent, when one is present without
-     *     `d`, or when `oth` is present without the primes; with `WrongType`
-     *     when the other primes are not a list of `OtherPrimeInfo`; with
+     *     `d`, or when `oth` is present without the primes; with
      *     `KeyPairMismatch` when the private members do not belong to the
      *     public ones; or as the common members' rules say
-     * @throws InvalidArgument when an additional member is named after a member
-     *     the key type defines
+     * @throws InvalidArgument when `otherPrimesInfo` is not a list of
+     *     `OtherPrimeInfo` objects, or as the common members' rules say
      */
     public function __construct(
         public string $modulus,
@@ -370,21 +369,24 @@ final readonly class RsaKey extends Jwk
     }
 
     /**
-     * Applies RFC 7518 section 6.3.2: `oth` is a list of entries, `d` is
-     * required of a private key, the five optimization members come all
-     * together or not at all, and `oth` needs the primes
+     * Applies RFC 7518 section 6.3.2: `d` is required of a private key, the
+     * five optimization members come all together or not at all, and `oth`
+     * needs the primes
      *
-     * @throws InvalidJwk
+     * @throws InvalidArgument when `otherPrimesInfo` is not a list of
+     *     `OtherPrimeInfo` objects
+     * @throws InvalidJwk with `InvalidValue`, `NonMinimalInteger`, or
+     *     `InconsistentPrivateMembers`
      */
     private function checkPrivateMembers(): void
     {
         if (!array_is_list($this->otherPrimesInfo)) {
-            throw self::notAnOtherPrimesList();
+            throw new InvalidArgument('otherPrimesInfo must be a list of OtherPrimeInfo objects');
         }
 
         foreach ($this->otherPrimesInfo as $info) {
             if (!$info instanceof OtherPrimeInfo) {
-                throw self::notAnOtherPrimesList();
+                throw new InvalidArgument('otherPrimesInfo must be a list of OtherPrimeInfo objects');
             }
         }
 
@@ -486,15 +488,6 @@ final readonly class RsaKey extends Jwk
                 'An RSA key with more than two primes cannot be built by OpenSSL',
             );
         }
-    }
-
-    private static function notAnOtherPrimesList(): InvalidJwk
-    {
-        return new InvalidJwk(
-            InvalidJwkReason::WrongType,
-            'The "oth" member must be a list of OtherPrimeInfo objects',
-            'oth',
-        );
     }
 
     /**

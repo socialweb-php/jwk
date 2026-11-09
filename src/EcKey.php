@@ -68,8 +68,9 @@ final readonly class EcKey extends Jwk
      *     less than the curve's order; with `PointNotOnCurve` when `x` and `y`
      *     are not a point on the curve; with `KeyPairMismatch` when `d` does
      *     not derive the point; or as the common members' rules say
-     * @throws InvalidArgument when an additional member is named after a member
-     *     the key type defines
+     * @throws InvalidArgument when `keyOperations` or `certificateChain`
+     *     is not a list of the right type, or as the common members' rules
+     *     say
      */
     public function __construct(
         public Curve $curve,

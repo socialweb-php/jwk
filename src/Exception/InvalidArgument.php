@@ -28,12 +28,20 @@ namespace SocialWeb\Jwk\Exception;
 use InvalidArgumentException;
 
 /**
- * Thrown for a caller's own mistake: an additional member named after a
- * member the key type defines, given to `withAdditionalMember()` or to a
- * key class's constructor; a string that is not base64url, given to
- * `Base64Url::decode()`; members that describe no key OpenSSL builds,
- * given to `OpenSsl::build()`; or a reader that is not an entry of the
- * `oth` member, given to `OtherPrimeInfo::fromMembers()`
+ * Thrown for a mistake in the calling code, which is never a fault of the
+ * document being read
+ *
+ * The mistakes are a value of a PHP type JSON cannot hold, such as an
+ * object of a class other than `stdClass`, a closure, or a resource, given
+ * at any depth to `fromJson()`, a constructor, or `withAdditionalMember()`;
+ * a `keyOperations`, `certificateChain`, `otherPrimesInfo`, or `keys`
+ * argument that is not a list of the right type; an additional member
+ * named after a member the key type or the set defines; an empty
+ * passphrase; a file path where PEM text belongs; a negative position for
+ * a skipped key; and, in the internal classes, a string that is not
+ * base64url given to `Base64Url::decode()`, members that describe no key
+ * OpenSSL builds given to `OpenSsl::build()`, and a reader that is not an
+ * entry of the `oth` member given to `OtherPrimeInfo::fromMembers()`
  */
 final class InvalidArgument extends InvalidArgumentException implements JwkException
 {

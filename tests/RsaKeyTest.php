@@ -9,6 +9,7 @@ use ReflectionClass;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\Exception\ConversionFailed;
 use SocialWeb\Jwk\Exception\ConversionFailedReason;
+use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\Jwk;
@@ -469,22 +470,18 @@ final class RsaKeyTest extends TestCase
      * @param array<array-key, mixed> $otherPrimesInfo
      */
     #[DataProvider('wrongOtherPrimes')]
-    public function testTheConstructorChecksTheOtherPrimesAsParsingDoes(array $otherPrimesInfo): void
+    public function testTheConstructorRefusesOtherPrimesOfTheWrongShape(array $otherPrimesInfo): void
     {
         $a2 = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
 
-        try {
-            new ReflectionClass(RsaKey::class)->newInstanceArgs([
-                'modulus' => Base64Url::decode(self::fixtureString($a2, 'n')),
-                'publicExponent' => "\x01\x00\x01",
-                'otherPrimesInfo' => $otherPrimesInfo,
-            ]);
-            $this->fail('Expected InvalidJwk');
-        } catch (InvalidJwk $exception) {
-            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
-            $this->assertSame('oth', $exception->member);
-            $this->assertSame('The "oth" member must be a list of OtherPrimeInfo objects', $exception->getMessage());
-        }
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('otherPrimesInfo must be a list of OtherPrimeInfo objects');
+
+        new ReflectionClass(RsaKey::class)->newInstanceArgs([
+            'modulus' => Base64Url::decode(self::fixtureString($a2, 'n')),
+            'publicExponent' => "\x01\x00\x01",
+            'otherPrimesInfo' => $otherPrimesInfo,
+        ]);
     }
 
     public function testAcceptsAPublicExponentBelowTheModulus(): void

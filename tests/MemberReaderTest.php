@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace SocialWeb\Test\Jwk;
 
+use DateTimeImmutable;
+use JsonSerializable;
 use PHPUnit\Framework\Attributes\DataProvider;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
@@ -45,6 +47,70 @@ final class MemberReaderTest extends TestCase
         $this->assertSame("\x01\x00\x01", $reader->requiredBytes('k'));
         $this->assertSame("\x01", $reader->objectList('oth')[0]->bytes('r'));
         $this->assertSame('{"o":{"a":{}}}', json_encode($reader->except(['kty', 'k', 'oth'])));
+    }
+
+    public function testReadsAJsonSerializableAsWhatItSerializesTo(): void
+    {
+        $serializable = static fn (mixed $value): JsonSerializable => new class ($value) implements JsonSerializable {
+            public function __construct(private readonly mixed $value)
+            {
+            }
+
+            public function jsonSerialize(): mixed
+            {
+                return $this->value;
+            }
+        };
+
+        $fromArray = MemberReader::fromJson($serializable(['kty' => 'oct', 'k' => 'AQAB']));
+        $fromObject = MemberReader::fromJson($serializable((object) ['kty' => 'oct', 'k' => 'AQAB']));
+        $fromText = MemberReader::fromJson($serializable('{"kty":"oct","k":"AQAB"}'));
+
+        foreach ([$fromArray, $fromObject, $fromText] as $reader) {
+            $this->assertSame('oct', $reader->requiredString('kty'));
+            $this->assertSame("\x01\x00\x01", $reader->requiredBytes('k'));
+        }
+
+        try {
+            MemberReader::fromJson($serializable(42));
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::NotAnObject, $exception->reason);
+        }
+
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A value of type JsonSerializable@anonymous cannot be read as JSON');
+
+        MemberReader::fromJson($serializable($serializable([])));
+    }
+
+    public function testRefusesAnObjectOfAnotherClassAsACallersMistake(): void
+    {
+        $objects = [
+            'a stdClass subclass' => [
+                new class extends stdClass {
+                    public string $kty = 'oct';
+                },
+                'stdClass@anonymous',
+            ],
+            'a date in a member' => [['kty' => 'oct', 'when' => new DateTimeImmutable()], 'DateTimeImmutable'],
+            'a closure after a member that is not UTF-8' => [
+                ['kty' => "\xff", 'ext' => static fn (): int => 1],
+                'Closure',
+            ],
+        ];
+
+        foreach ($objects as $label => [$json, $type]) {
+            try {
+                MemberReader::fromJson($json);
+                $this->fail('Expected InvalidArgument for ' . $label);
+            } catch (InvalidArgument $exception) {
+                $this->assertSame(
+                    sprintf('A value of type %s cannot be read as JSON', $type),
+                    $exception->getMessage(),
+                );
+            }
+        }
     }
 
     public function testAStdClassWithNumericMemberNamesIsAnObject(): void

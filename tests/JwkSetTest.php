@@ -194,7 +194,7 @@ final class JwkSetTest extends TestCase
         } catch (InvalidJwkSet $exception) {
             $previous = $exception->getPrevious();
             $this->assertInstanceOf(InvalidJwk::class, $previous);
-            $this->assertSame(InvalidJwkReason::InvalidValue, $previous->reason);
+            $this->assertSame(InvalidJwkReason::MalformedJson, $previous->reason);
             $this->assertSame('issuer', $previous->member);
         }
     }
@@ -438,9 +438,8 @@ final class JwkSetTest extends TestCase
      */
     public static function refusedAdditionalMembers(): iterable
     {
-        yield 'a string that is not UTF-8' => [['issuer' => "\xff"], InvalidJwkReason::InvalidValue];
-        yield 'a number that is not finite' => [['n' => INF], InvalidJwkReason::InvalidValue];
-        yield 'a value that is not a JSON value' => [['when' => new DateTimeImmutable()], InvalidJwkReason::WrongType];
+        yield 'a string that is not UTF-8' => [['issuer' => "\xff"], InvalidJwkReason::MalformedJson];
+        yield 'a number that is not finite' => [['n' => INF], InvalidJwkReason::MalformedJson];
         yield 'a name that is not UTF-8' => [["\xff" => 1], InvalidJwkReason::MalformedJson];
     }
 
@@ -462,6 +461,14 @@ final class JwkSetTest extends TestCase
             $this->assertSame($previous->getMessage(), $exception->getMessage());
             $this->assertSame(0, $exception->getCode());
         }
+    }
+
+    public function testTheConstructorRefusesAnAdditionalMemberOfATypeJsonCannotHold(): void
+    {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('A value of type DateTimeImmutable cannot be read as JSON');
+
+        new JwkSet([], ['when' => new DateTimeImmutable()]);
     }
 
     public function testCannotBeSerializedOrUnserialized(): void

@@ -6,6 +6,7 @@ namespace SocialWeb\Test\Jwk;
 
 use Closure;
 use DateTimeImmutable;
+use JsonSerializable;
 use LogicException;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificateSigningRequest;
@@ -91,6 +92,67 @@ final class JwkTest extends TestCase
         $array = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertEquals(Jwk::fromJson($text)->jsonSerialize(), Jwk::fromJson($array)->jsonSerialize());
+    }
+
+    public function testFromJsonTakesAJsonSerializableAsWhatItSerializesTo(): void
+    {
+        $fixture = self::fixture('rfc7517/section-3.json');
+        $key = Jwk::fromJson($fixture);
+        $serializable = new class ($fixture) implements JsonSerializable {
+            /**
+             * @param array<string, mixed> $value
+             */
+            public function __construct(private readonly array $value)
+            {
+            }
+
+            public function jsonSerialize(): mixed
+            {
+                return $this->value;
+            }
+        };
+
+        $this->assertSame($key->toJson(), Jwk::fromJson($key)->toJson());
+        $this->assertSame($key->toJson(), Jwk::fromJson($serializable)->toJson());
+    }
+
+    public function testRefusesAValueOfATypeJsonCannotHoldBeforeReadingAnyMember(): void
+    {
+        $attempts = [
+            'a stdClass subclass' => [
+                static fn (): Jwk => Jwk::fromJson(new class extends stdClass {
+                    public string $kty = 'oct';
+                }),
+                'stdClass@anonymous',
+            ],
+            'a date in a member' => [
+                static fn (): Jwk => Jwk::fromJson(['kty' => 'oct', 'k' => 'AQ', 'when' => new DateTimeImmutable()]),
+                'DateTimeImmutable',
+            ],
+            'a closure after a member that is not UTF-8' => [
+                static fn (): Jwk => Jwk::fromJson(['kty' => "\xff", 'ext' => static fn (): int => 1]),
+                'Closure',
+            ],
+            'a closure in a constructor argument' => [
+                static fn (): Jwk => new OctKey(
+                    "\x01",
+                    additionalMembers: ['a' => "\xff", 'b' => static fn (): int => 1],
+                ),
+                'Closure',
+            ],
+        ];
+
+        foreach ($attempts as $label => [$attempt, $type]) {
+            try {
+                $attempt();
+                $this->fail('Expected InvalidArgument for ' . $label);
+            } catch (InvalidArgument $exception) {
+                $this->assertSame(
+                    sprintf('A value of type %s cannot be read as JSON', $type),
+                    $exception->getMessage(),
+                );
+            }
+        }
     }
 
     public function testFromJsonTakesATreeOfStdClassObjects(): void
@@ -641,14 +703,29 @@ final class JwkTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{array<string, mixed>, string}>
+     * @return iterable<string, array{array<string, mixed>, string, string}>
      */
     public static function wrongListArguments(): iterable
     {
-        yield 'a key operation that is not a string' => [['keyOperations' => [1]], 'key_ops'];
-        yield 'key operations that are not a list' => [['keyOperations' => ['a' => 'sign']], 'key_ops'];
-        yield 'a certificate that is not a string' => [['certificateChain' => [1]], 'x5c'];
-        yield 'certificates that are not a list' => [['certificateChain' => ['a' => 'MIIB']], 'x5c'];
+        $operations = 'keyOperations must be a list of strings or KeyOperation cases';
+        $certificates = 'certificateChain must be a list of strings';
+
+        yield 'a key operation that is not a string' => [['keyOperations' => [1]], 'withKeyOperations', $operations];
+        yield 'key operations that are not a list' => [
+            ['keyOperations' => ['a' => 'sign']],
+            'withKeyOperations',
+            $operations,
+        ];
+        yield 'a certificate that is not a string' => [
+            ['certificateChain' => [1]],
+            'withCertificateChain',
+            $certificates,
+        ];
+        yield 'certificates that are not a list' => [
+            ['certificateChain' => ['a' => 'MIIB']],
+            'withCertificateChain',
+            $certificates,
+        ];
     }
 
     /**
@@ -658,34 +735,32 @@ final class JwkTest extends TestCase
      * @param array<string, mixed> $arguments
      */
     #[DataProvider('wrongListArguments')]
-    public function testAConstructorChecksItsListArgumentsAsParsingDoes(array $arguments, string $member): void
-    {
-        try {
-            new ReflectionClass(OctKey::class)->newInstanceArgs(['keyValue' => "\x01", ...$arguments]);
-            $this->fail('Expected InvalidJwk');
-        } catch (InvalidJwk $exception) {
-            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
-            $this->assertSame($member, $exception->member);
-            $this->assertSame(sprintf('The "%s" member must be a list of strings', $member), $exception->getMessage());
-        }
+    public function testAConstructorRefusesAListArgumentOfTheWrongShape(
+        array $arguments,
+        string $method,
+        string $message,
+    ): void {
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains($message);
+
+        new ReflectionClass(OctKey::class)->newInstanceArgs(['keyValue' => "\x01", ...$arguments]);
     }
 
     /**
      * @param array<string, mixed> $arguments
      */
     #[DataProvider('wrongListArguments')]
-    public function testTheWithMethodsCheckTheirListArgumentsAsParsingDoes(array $arguments, string $member): void
-    {
+    public function testTheWithMethodsRefuseAListArgumentOfTheWrongShape(
+        array $arguments,
+        string $method,
+        string $message,
+    ): void {
         $key = new OctKey("\x01");
-        $method = $member === 'key_ops' ? 'withKeyOperations' : 'withCertificateChain';
 
-        try {
-            new ReflectionMethod($key, $method)->invoke($key, ...$arguments);
-            $this->fail('Expected InvalidJwk');
-        } catch (InvalidJwk $exception) {
-            $this->assertSame(InvalidJwkReason::WrongType, $exception->reason);
-            $this->assertSame($member, $exception->member);
-        }
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains($message);
+
+        new ReflectionMethod($key, $method)->invoke($key, ...$arguments);
     }
 
     public function testAConstructorAcceptsKeyOperationCasesAndStrings(): void
@@ -723,7 +798,7 @@ final class JwkTest extends TestCase
             $change(new OctKey("\x01"));
             $this->fail('Expected InvalidJwk');
         } catch (InvalidJwk $exception) {
-            $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
             $this->assertSame($member, $exception->member);
             $this->assertSame(
                 sprintf('The "%s" member holds a string that is not valid UTF-8', $member),
@@ -747,7 +822,7 @@ final class JwkTest extends TestCase
                 $attempt();
                 $this->fail('Expected InvalidJwk for ' . $member);
             } catch (InvalidJwk $exception) {
-                $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason, $member);
+                $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason, $member);
                 $this->assertSame($member, $exception->member);
             }
         }
@@ -765,26 +840,10 @@ final class JwkTest extends TestCase
             [static fn (): OctKey => $key->withAdditionalMember("\0a", 1), InvalidJwkReason::MalformedJson, null],
             [
                 static fn (): OctKey => $key->withAdditionalMember('x', ['a' => "\xff"]),
-                InvalidJwkReason::InvalidValue,
+                InvalidJwkReason::MalformedJson,
                 'x',
             ],
-            [static fn (): OctKey => $key->withAdditionalMember('x', [INF]), InvalidJwkReason::InvalidValue, 'x'],
-            [
-                static fn (): OctKey => $key->withAdditionalMember('x', new DateTimeImmutable()),
-                InvalidJwkReason::WrongType,
-                'x',
-            ],
-            [
-                static fn (): OctKey => $key->withAdditionalMember('x', new class extends stdClass {
-                }),
-                InvalidJwkReason::WrongType,
-                'x',
-            ],
-            [
-                static fn (): OctKey => new OctKey("\x01", additionalMembers: ['x' => (object) ['y' => [$key]]]),
-                InvalidJwkReason::WrongType,
-                'x',
-            ],
+            [static fn (): OctKey => $key->withAdditionalMember('x', [INF]), InvalidJwkReason::MalformedJson, 'x'],
         ];
 
         foreach ($attempts as $index => [$attempt, $reason, $member]) {
@@ -794,6 +853,36 @@ final class JwkTest extends TestCase
             } catch (InvalidJwk $exception) {
                 $this->assertSame($reason, $exception->reason, (string) $index);
                 $this->assertSame($member, $exception->member, (string) $index);
+            }
+        }
+    }
+
+    public function testRefusesAnAdditionalMemberOfATypeJsonCannotHold(): void
+    {
+        $key = new OctKey("\x01");
+        $attempts = [
+            [static fn (): OctKey => $key->withAdditionalMember('x', new DateTimeImmutable()), 'DateTimeImmutable'],
+            [
+                static fn (): OctKey => $key->withAdditionalMember('x', new class extends stdClass {
+                }),
+                'stdClass@anonymous',
+            ],
+            [
+                static fn (): OctKey => new OctKey("\x01", additionalMembers: ['x' => (object) ['y' => [$key]]]),
+                OctKey::class,
+            ],
+        ];
+
+        foreach ($attempts as $index => [$attempt, $type]) {
+            try {
+                $attempt();
+                $this->fail('Expected InvalidArgument for attempt ' . $index);
+            } catch (InvalidArgument $exception) {
+                $this->assertSame(
+                    sprintf('A value of type %s cannot be read as JSON', $type),
+                    $exception->getMessage(),
+                    (string) $index,
+                );
             }
         }
     }
@@ -944,7 +1033,7 @@ final class JwkTest extends TestCase
                 $key->withKeyId("\xff");
                 $this->fail('Expected InvalidJwk for a key ID that is not UTF-8');
             } catch (InvalidJwk $exception) {
-                $this->assertSame(InvalidJwkReason::InvalidValue, $exception->reason);
+                $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
                 $this->assertSame('kid', $exception->member);
 
                 $leaks = [];
