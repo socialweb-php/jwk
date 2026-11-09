@@ -29,6 +29,7 @@ use SensitiveParameter;
 use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
+use SplObjectStorage;
 use stdClass;
 
 use function array_is_list;
@@ -189,7 +190,9 @@ final class JsonValue
      * The JSON types are `null`, booleans, integers, floats, strings, PHP
      * arrays, and `stdClass` objects whose class is `stdClass` itself.
      * Nesting deeper than `json_decode()` reads is not walked; `read()`
-     * refuses it.
+     * refuses it. An object is walked again only when it is met at a
+     * shallower depth than before, since that walk reaches everything a
+     * deeper one would, so an object that holds itself is walked once.
      *
      * @throws InvalidArgument naming the type of the first value found
      *     whose PHP type is not a JSON type
@@ -197,6 +200,8 @@ final class JsonValue
     public static function checkTypes(#[SensitiveParameter] mixed $value): void
     {
         $pending = [[$value, 1]];
+        /** @var SplObjectStorage<stdClass, int> $walked */
+        $walked = new SplObjectStorage();
 
         while (($next = array_pop($pending)) !== null) {
             [$current, $depth] = $next;
@@ -204,6 +209,14 @@ final class JsonValue
             if (is_array($current) || ($current instanceof stdClass && $current::class === stdClass::class)) {
                 if ($depth > self::MAX_DEPTH) {
                     continue;
+                }
+
+                if ($current instanceof stdClass) {
+                    if (isset($walked[$current]) && $walked[$current] <= $depth) {
+                        continue;
+                    }
+
+                    $walked[$current] = $depth;
                 }
 
                 /** @var mixed $entry */

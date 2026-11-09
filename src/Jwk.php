@@ -519,7 +519,7 @@ abstract readonly class Jwk implements JsonSerializable
      */
     public function withAdditionalMember(string $name, mixed $value): static
     {
-        JsonValue::checkTypes($value);
+        JsonValue::checkTypes([$name => $value]);
         $this->checkAdditionalMemberName($name);
 
         $members = $this->additionalMembers;

@@ -252,6 +252,18 @@ final class JsonValueTest extends TestCase
         JsonValue::read('m', $value);
     }
 
+    public function testCheckTypesEndsOnAnObjectThatHoldsItselfTwice(): void
+    {
+        $twice = new stdClass();
+        $twice->a = $twice;
+        $twice->b = $twice;
+        JsonValue::checkTypes($twice);
+
+        $this->expectException(InvalidJwk::class);
+
+        JsonValue::read('m', $twice);
+    }
+
     public function testCheckTypesWalksExactlyAsDeepAsReadReads(): void
     {
         $closure = static fn (): int => 1;
