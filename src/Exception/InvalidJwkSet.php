@@ -31,10 +31,7 @@ use UnexpectedValueException;
 /**
  * Thrown when an input is not a well-formed JWK Set
  *
- * The reason says which rule the input broke: the text does not parse, the
- * value is not an object, it lacks the `keys` member, or `keys` is not an
- * array. A member of the set that is not a usable key is never this; the
- * set records it as skipped.
+ * The reason says which rule the input broke.
  */
 final class InvalidJwkSet extends UnexpectedValueException implements JwkException
 {
