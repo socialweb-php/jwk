@@ -5,29 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [Unreleased]
 
 ### Added
 
-- Nothing.
+- `InvalidJwkSetReason`, a pure enum with the cases `MalformedJson`, `NotAnObject`, `MissingKeysMember`, and `KeysNotAnArray`, and `InvalidJwkSet::$reason`, which holds the case for the refusal.
+- `InvalidJwkReason::EmptyKeyOperations`, `EmptyCertificateChain`, and `EmptyOtherPrimesInfo`. A `key_ops`, `x5c`, or `oth` member that is an empty array is refused with the matching case, where it was read and written back as absent.
+- `Jwk::fromJson()` and `JwkSet::fromJson()` accept an object that implements `JsonSerializable`, read as what its `jsonSerialize()` returns, so a key or a set reads from another key or set.
+- `JwkSet::$skipped`, the public list of the members `fromJson()` set aside, in place of `skipped()`.
+- `OtherPrimeInfo::toJson()`.
 
 ### Changed
 
-- Nothing.
-
-### Deprecated
-
-- Nothing.
+- A value of a PHP type JSON cannot hold, such as an object of a class other than `stdClass`, a closure, or a resource, given anywhere in the input of `fromJson()`, a constructor, or `withAdditionalMember()`, raises `InvalidArgument` before any member is read. It was `InvalidJwk` with `WrongType`, and in a set a skipped key.
+- A `keyOperations`, `certificateChain`, or `otherPrimesInfo` constructor argument that is not a list of the right type, and a `keys` argument of `new JwkSet()` that is not a list of `Jwk` objects, raise `InvalidArgument`. They were `InvalidJwk` with `WrongType` and `InvalidJwkSet`.
+- A string that is not valid UTF-8 or a number that is not finite is refused as `InvalidJwk` with `MalformedJson`, where it was `InvalidValue`; in a member of a set other than `keys`, as `InvalidJwkSet` with `MalformedJson`.
+- `toJson()` on a key, a set, and an `oth` entry writes a character outside ASCII as itself rather than as a `\u` escape.
+- `Curve::fromOpensslCurveName()` is `tryFromOpenSslCurveName()`, `fromOpensslKeyType()` is `tryFromOpenSslKeyType()`, `opensslCurveName()` is `openSslCurveName()`, `opensslKeyType()` is `openSslKeyType()`, and `opensslDetailsKey()` is `openSslDetailsKey()`.
+- The `AmbiguousKeyId` message starts with the key identifier, `Key identifier "1" names 2 keys; pass the key type to choose among them`, and the `ConversionFailed` message for an EC curve the package does not implement quotes the curve name.
 
 ### Removed
 
-- Nothing.
+- `JwkSet::keys()`. Iterate the set, or call `iterator_to_array()` on it.
+- `JwkSet::skipped()`, replaced by the `$skipped` property.
 
 ### Fixed
 
-- Nothing.
+- `JwkSet::toJson()` writes a set whose key has members nested as deep as `fromJson()` accepts, and `JwkSet::fromJson()` reads it back; both threw at the default depth of `json_encode()` and `json_decode()`.
+- The OpenSSL error queue is cleared before and read after every OpenSSL call, so a failure reports its own errors and never one left by an earlier call.
 
-## 0.1.0 - 2026-11-01
+## [0.1.0] - 2026-11-01
 
 ### Added
 
@@ -39,18 +46,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The enums `KeyType`, `Curve`, `KeyUse`, `KeyOperation`, and `HashAlgorithm`, and `OtherPrimeInfo` for the `oth` member of an RSA key.
 - Exceptions under `SocialWeb\Jwk\Exception`, every one implementing the `JwkException` marker interface: `InvalidArgument`, `InvalidJwk` with an `InvalidJwkReason` case and the member it names, `InvalidJwkSet`, `ConversionFailed` with a `ConversionFailedReason` case, and `AmbiguousKeyId`.
 
-### Changed
-
-- Nothing.
-
-### Deprecated
-
-- Nothing.
-
-### Removed
-
-- Nothing.
-
-### Fixed
-
-- Nothing.
+[unreleased]: https://github.com/socialweb-php/jwk/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/socialweb-php/jwk/compare/0.0.0...0.1.0
