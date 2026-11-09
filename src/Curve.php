@@ -38,6 +38,10 @@ use const OPENSSL_KEYTYPE_X448;
  * section 6.2.1.1 and secp256k1 from RFC 8812 section 3.1. The last four
  * are `OKP` curves from RFC 8037 section 3: the Edwards curves sign and
  * the Montgomery curves agree on keys.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.1 "crv" (Curve) Parameter
+ * @link https://www.rfc-editor.org/rfc/rfc8037#section-3 Algorithms
+ * @link https://www.rfc-editor.org/rfc/rfc8812#section-3.1 JOSE and COSE secp256k1 Curve Key Representations
  */
 enum Curve: string
 {

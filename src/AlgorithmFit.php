@@ -40,6 +40,9 @@ use function in_array;
  * section 4.4 lets other values be used.
  *
  * @internal
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-3.1 "alg" (Algorithm) Header Parameter Values for JWS
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-4.1 "alg" (Algorithm) Header Parameter Values for JWE
  */
 final class AlgorithmFit
 {

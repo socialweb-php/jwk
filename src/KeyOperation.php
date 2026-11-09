@@ -30,6 +30,8 @@ namespace SocialWeb\Jwk;
  *
  * The member is an open registry, so a key stores its operations as
  * strings; this enum names the eight registered values.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7517#section-4.3 "key_ops" (Key Operations) Parameter
  */
 enum KeyOperation: string
 {

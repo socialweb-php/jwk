@@ -71,6 +71,8 @@ use const JSON_UNESCAPED_UNICODE;
  * by counting it, and through the lookups; a caller that wants them as an
  * array calls `iterator_to_array()`.
  *
+ * @link https://www.rfc-editor.org/rfc/rfc7517#section-5 JWK Set Format
+ *
  * @implements IteratorAggregate<int, Jwk>
  */
 final readonly class JwkSet implements Countable, IteratorAggregate, JsonSerializable

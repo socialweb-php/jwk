@@ -42,6 +42,8 @@ use function strcmp;
  * curve fixes, leading zeros included, as sections 6.2.1.2, 6.2.1.3, and
  * 6.2.2.1 require. The point is checked to lie on the curve, and a private
  * key is checked to be less than the curve's order and to derive the point.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-6.2 Parameters for Elliptic Curve Keys
  */
 final readonly class EcKey extends Jwk
 {

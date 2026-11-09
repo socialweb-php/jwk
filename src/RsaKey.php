@@ -58,6 +58,8 @@ use const OPENSSL_ALGO_SHA256;
  * exponent; a private key adds the private exponent and, as RFC 7518
  * section 6.3.2 recommends, the two primes and the three CRT values that
  * speed up its use, with any further primes in `oth`.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-6.3 Parameters for RSA Keys
  */
 final readonly class RsaKey extends Jwk
 {

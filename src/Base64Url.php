@@ -47,6 +47,8 @@ use function strtr;
  * equals one computed from the members as sent.
  *
  * @internal
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7515#section-2 Terminology
  */
 final class Base64Url
 {

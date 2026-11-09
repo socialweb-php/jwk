@@ -45,6 +45,9 @@ use function strlen;
  * that the BIT STRING holds.
  *
  * @internal
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc5280#section-4.1 Basic Certificate Fields
+ * @link https://www.rfc-editor.org/rfc/rfc8017#appendix-A.1.1 RSA Public Key Syntax
  */
 final class RsaPublicKeyInfo
 {

@@ -40,6 +40,8 @@ use function sprintf;
  * The Edwards curves sign; the Montgomery curves agree on keys. The byte
  * lengths come from RFC 8032 and RFC 7748, and a private key is checked to
  * derive the public key.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc8037#section-2 Key Type "OKP"
  */
 final readonly class OkpKey extends Jwk
 {

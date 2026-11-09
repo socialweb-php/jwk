@@ -31,6 +31,8 @@ namespace SocialWeb\Jwk;
  * The member is an open registry, so a key stores it as a string; this
  * enum names the two registered values and the operations each one is
  * consistent with.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7517#section-4.2 "use" (Public Key Use) Parameter
  */
 enum KeyUse: string
 {

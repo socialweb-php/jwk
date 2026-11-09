@@ -30,6 +30,8 @@ namespace SocialWeb\Jwk;
  *
  * `RSA`, `EC`, and `oct` are registered by RFC 7518 section 6.1 and `OKP`
  * by RFC 8037 section 2.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-6.1 "kty" (Key Type) Parameter Values
  */
 enum KeyType: string
 {

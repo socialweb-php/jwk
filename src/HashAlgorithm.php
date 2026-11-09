@@ -32,6 +32,8 @@ namespace SocialWeb\Jwk;
  *
  * SHA-256 is the one RFC 9278 section 5 requires an implementation to
  * have, and the default throughout the package.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc9278#section-4 Hash Algorithms Identifier
  */
 enum HashAlgorithm: string
 {

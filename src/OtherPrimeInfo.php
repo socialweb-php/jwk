@@ -43,6 +43,8 @@ use const JSON_UNESCAPED_UNICODE;
 /**
  * One entry of the `oth` member of an RSA private key, per RFC 7518
  * section 6.3.2.7: a third or later prime factor with its CRT values
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-6.3.2.7 "oth" (Other Primes Info) Parameter
  */
 final readonly class OtherPrimeInfo implements JsonSerializable
 {
@@ -145,7 +147,9 @@ final readonly class OtherPrimeInfo implements JsonSerializable
     /**
      * @param string $entry Which entry, as the messages name it
      *
-     * @throws InvalidJwk
+     * @throws InvalidJwk with `InvalidValue` for an empty or zero member or
+     *     a prime factor of 1, or with `NonMinimalInteger` for a leading
+     *     zero byte
      */
     private static function checkMembers(
         #[SensitiveParameter] string $primeFactor,

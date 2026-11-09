@@ -38,6 +38,8 @@ use SocialWeb\Jwk\Exception\InvalidJwkReason;
  *
  * A symmetric key is never public: `isPrivate()` is always `true`, and it
  * has no public form, no PEM form, and no OpenSSL form.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7518#section-6.4 Parameters for Symmetric Keys
  */
 final readonly class OctKey extends Jwk
 {

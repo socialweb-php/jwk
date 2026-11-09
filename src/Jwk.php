@@ -69,6 +69,8 @@ use const JSON_UNESCAPED_UNICODE;
  * that every key can be written as JSON text. A constructor or `with`
  * method given a string that is not valid UTF-8 throws `InvalidJwk` with
  * the reason `MalformedJson` naming the member, as parsing does.
+ *
+ * @link https://www.rfc-editor.org/rfc/rfc7517#section-4 JSON Web Key (JWK) Format
  */
 abstract readonly class Jwk implements JsonSerializable
 {
@@ -321,6 +323,8 @@ abstract readonly class Jwk implements JsonSerializable
      *
      * A private key gives the thumbprint of its public form, per RFC 7638
      * section 3.2.1.
+     *
+     * @link https://www.rfc-editor.org/rfc/rfc7638#section-3 JSON Web Key (JWK) Thumbprint
      */
     public function thumbprint(HashAlgorithm $hash = HashAlgorithm::Sha256): string
     {
@@ -333,6 +337,8 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the RFC 9278 URI of the thumbprint:
      * `urn:ietf:params:oauth:jwk-thumbprint:` followed by the hash's
      * registered name, a colon, and the thumbprint
+     *
+     * @link https://www.rfc-editor.org/rfc/rfc9278#section-3 JWK Thumbprint URI
      */
     public function thumbprintUri(HashAlgorithm $hash = HashAlgorithm::Sha256): string
     {
