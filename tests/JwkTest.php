@@ -243,8 +243,10 @@ final class JwkTest extends TestCase
     ): void {
         $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         $this->assertIsArray($decoded);
+        $object = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
+        $this->assertInstanceOf(stdClass::class, $object);
 
-        foreach ([$json, $decoded] as $input) {
+        foreach ([$json, $decoded, $object] as $input) {
             try {
                 Jwk::fromJson($input);
                 $this->fail('Expected InvalidJwk');

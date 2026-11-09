@@ -247,9 +247,12 @@ final class JsonValueTest extends TestCase
         $cyclic->self = $cyclic;
         JsonValue::checkTypes($cyclic);
 
-        $this->expectException(InvalidJwk::class);
-
-        JsonValue::read('m', $value);
+        try {
+            JsonValue::read('m', $value);
+            $this->fail('Expected InvalidJwk');
+        } catch (InvalidJwk $exception) {
+            $this->assertSame(InvalidJwkReason::MalformedJson, $exception->reason);
+        }
     }
 
     public function testCheckTypesEndsOnAnObjectThatHoldsItselfTwice(): void

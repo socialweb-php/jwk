@@ -373,6 +373,7 @@ final class JwkSetTest extends TestCase
         $set = JwkSet::fromJson(['keys' => [[...$okp, 'key_ops' => []], $okp]]);
 
         $this->assertCount(1, $set);
+        $this->assertSame(Jwk::fromJson($okp)->toJson(), iterator_to_array($set)[0]->toJson());
         $this->assertCount(1, $set->skipped);
         $this->assertSame(0, $set->skipped[0]->index);
         $this->assertSame(InvalidJwkReason::EmptyKeyOperations, $set->skipped[0]->cause->reason);
@@ -548,10 +549,12 @@ final class JwkSetTest extends TestCase
     #[DataProvider('invalidKeyLists')]
     public function testTheConstructorRefusesAnythingButAListOfKeys(array $keys): void
     {
-        $this->expectException(InvalidArgument::class);
-        $this->expectExceptionMessageIsOrContains('keys must be a list of Jwk objects');
-
-        new ReflectionClass(JwkSet::class)->newInstance($keys);
+        try {
+            new ReflectionClass(JwkSet::class)->newInstance($keys);
+            $this->fail('Expected InvalidArgument');
+        } catch (InvalidArgument $exception) {
+            $this->assertSame('keys must be a list of Jwk objects', $exception->getMessage());
+        }
     }
 
     public function testTheConstructorRefusesAnAdditionalMemberNamedKeys(): void

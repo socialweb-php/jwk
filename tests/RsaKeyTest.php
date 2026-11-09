@@ -214,6 +214,19 @@ final class RsaKeyTest extends TestCase
         );
     }
 
+    public function testTheConstructorTakesAnEmptyOtherPrimesInfoAsTwoPrimes(): void
+    {
+        $fixture = self::fixtureSetMember('rfc7517/appendix-a2.json', 1);
+        $key = new RsaKey(
+            Base64Url::decode(self::fixtureString($fixture, 'n')),
+            Base64Url::decode(self::fixtureString($fixture, 'e')),
+            otherPrimesInfo: [],
+        );
+
+        $this->assertSame([], $key->otherPrimesInfo);
+        $this->assertSame(['kty', 'n', 'e'], array_keys($key->jsonSerialize()));
+    }
+
     public function testParsesAKeyWithThreePrimes(): void
     {
         $fixture = self::fixture('generated/rsa-three-primes.json');
