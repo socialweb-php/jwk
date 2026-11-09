@@ -60,6 +60,27 @@ enum InvalidJwkReason
     case WrongType;
 
     /**
+     * The `key_ops` member is an empty array; RFC 7517 section 4.3 defines
+     * it as an array of key operation values, and an empty one names no
+     * operation the key is intended for
+     */
+    case EmptyKeyOperations;
+
+    /**
+     * The `x5c` member is an empty array; RFC 7517 section 4.7 says it
+     * contains a chain of one or more certificates, the first of which
+     * MUST hold the key
+     */
+    case EmptyCertificateChain;
+
+    /**
+     * The `oth` member is an empty array; RFC 7518 section 6.3.2.7 says the
+     * member MUST be omitted when only two primes have been used, and MUST
+     * have one element for each prime beyond two
+     */
+    case EmptyOtherPrimesInfo;
+
+    /**
      * The `kty` member names a key type the package does not implement
      */
     case UnsupportedKeyType;

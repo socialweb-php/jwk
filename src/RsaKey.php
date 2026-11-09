@@ -223,12 +223,26 @@ final readonly class RsaKey extends Jwk
 
     /**
      * @internal
+     *
+     * @throws InvalidJwk with `EmptyOtherPrimesInfo` for an `oth` member
+     *     that is an empty array, or as the reader and the constructor
+     *     refuse the members
      */
     protected static function fromMembers(#[SensitiveParameter] MemberReader $members): self
     {
+        $entries = $members->objectList('oth');
+
+        if ($entries === [] && $members->has('oth')) {
+            throw new InvalidJwk(
+                InvalidJwkReason::EmptyOtherPrimesInfo,
+                'The "oth" member is empty, and it is omitted when a key has two primes',
+                'oth',
+            );
+        }
+
         $otherPrimesInfo = [];
 
-        foreach ($members->objectList('oth') as $info) {
+        foreach ($entries as $info) {
             $otherPrimesInfo[] = OtherPrimeInfo::fromMembers($info);
         }
 

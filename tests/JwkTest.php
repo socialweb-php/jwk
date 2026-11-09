@@ -198,14 +198,61 @@ final class JwkTest extends TestCase
             $this->assertSame($member, $exception->member);
         }
 
-        $accepted = json_decode(
-            '{"kty":"oct","k":"AQAB","key_ops":[],"x5c":[],"ext":{}}',
-            false,
-            512,
-            JSON_THROW_ON_ERROR,
-        );
+        $accepted = json_decode('{"kty":"oct","k":"AQAB","ext":{},"list":[]}', false, 512, JSON_THROW_ON_ERROR);
         $this->assertInstanceOf(stdClass::class, $accepted);
-        $this->assertSame('{"kty":"oct","k":"AQAB","ext":{}}', Jwk::fromJson($accepted)->toJson());
+        $this->assertSame('{"kty":"oct","k":"AQAB","ext":{},"list":[]}', Jwk::fromJson($accepted)->toJson());
+    }
+
+    /**
+     * @return iterable<string, array{string, InvalidJwkReason, string, string}>
+     */
+    public static function emptyArrayMembers(): iterable
+    {
+        yield 'key_ops' => [
+            '{"kty":"oct","k":"AQAB","key_ops":[]}',
+            InvalidJwkReason::EmptyKeyOperations,
+            'key_ops',
+            'The "key_ops" member is empty, and an empty array names no key operation',
+        ];
+        yield 'x5c' => [
+            '{"kty":"oct","k":"AQAB","x5c":[]}',
+            InvalidJwkReason::EmptyCertificateChain,
+            'x5c',
+            'The "x5c" member is empty, and a certificate chain holds one or more certificates',
+        ];
+        yield 'oth' => [
+            '{"kty":"RSA","n":"AQAB","e":"Aw","oth":[]}',
+            InvalidJwkReason::EmptyOtherPrimesInfo,
+            'oth',
+            'The "oth" member is empty, and it is omitted when a key has two primes',
+        ];
+    }
+
+    /**
+     * The package writes a key without these members when it has none of
+     * them, so an empty array is refused rather than read and written back
+     * as absent
+     */
+    #[DataProvider('emptyArrayMembers')]
+    public function testRefusesAnEmptyArrayForAMemberItWouldNotWriteBack(
+        string $json,
+        InvalidJwkReason $reason,
+        string $member,
+        string $message,
+    ): void {
+        $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        $this->assertIsArray($decoded);
+
+        foreach ([$json, $decoded] as $input) {
+            try {
+                Jwk::fromJson($input);
+                $this->fail('Expected InvalidJwk');
+            } catch (InvalidJwk $exception) {
+                $this->assertSame($reason, $exception->reason);
+                $this->assertSame($member, $exception->member);
+                $this->assertSame($message, $exception->getMessage());
+            }
+        }
     }
 
     /**

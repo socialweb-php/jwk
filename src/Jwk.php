@@ -636,18 +636,42 @@ abstract readonly class Jwk implements JsonSerializable
      *     certificateSha256Thumbprint: ?string,
      *     additionalMembers: array<string, mixed>,
      * }
+     *
+     * @throws InvalidJwk with `EmptyKeyOperations` or
+     *     `EmptyCertificateChain` for a `key_ops` or `x5c` member that is
+     *     an empty array, which the package neither keeps nor writes back,
+     *     or as the reader refuses a member
      */
     protected static function commonArguments(
         #[SensitiveParameter] MemberReader $members,
         array $keyMemberNames,
     ): array {
+        $keyOperations = $members->stringList('key_ops');
+        $certificateChain = $members->stringList('x5c');
+
+        if ($keyOperations === [] && $members->has('key_ops')) {
+            throw new InvalidJwk(
+                InvalidJwkReason::EmptyKeyOperations,
+                'The "key_ops" member is empty, and an empty array names no key operation',
+                'key_ops',
+            );
+        }
+
+        if ($certificateChain === [] && $members->has('x5c')) {
+            throw new InvalidJwk(
+                InvalidJwkReason::EmptyCertificateChain,
+                'The "x5c" member is empty, and a certificate chain holds one or more certificates',
+                'x5c',
+            );
+        }
+
         return [
             'keyId' => $members->string('kid'),
             'algorithm' => $members->string('alg'),
             'use' => $members->string('use'),
-            'keyOperations' => $members->stringList('key_ops'),
+            'keyOperations' => $keyOperations,
             'certificateUrl' => $members->string('x5u'),
-            'certificateChain' => $members->stringList('x5c'),
+            'certificateChain' => $certificateChain,
             'certificateSha1Thumbprint' => $members->string('x5t'),
             'certificateSha256Thumbprint' => $members->string('x5t#S256'),
             'additionalMembers' => $members->except([...self::COMMON_MEMBER_NAMES, ...$keyMemberNames]),
