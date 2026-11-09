@@ -65,9 +65,11 @@ use const JSON_UNESCAPED_UNICODE;
  *
  * A set is immutable. Parsing keeps every member it can use and sets the
  * rest aside with the reason, so that one unusable member does not make
- * the set unusable; a caller that wants strictness checks `skipped()`.
+ * the set unusable; a caller that wants strictness checks `$skipped`.
  * Members of the set object other than `keys` are kept as additional
- * members and written back.
+ * members and written back. The keys are reached by iterating the set,
+ * by counting it, and through the lookups; a caller that wants them as an
+ * array calls `iterator_to_array()`.
  *
  * @implements IteratorAggregate<int, Jwk>
  */
@@ -83,11 +85,13 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
     private array $additionalMembers;
 
     /**
-     * The members of the received `keys` array that could not be used
+     * The members of the received `keys` array that `fromJson()` could not
+     * use, each with its position and the refusal; a set built in code has
+     * none
      *
      * @var list<SkippedKey>
      */
-    private array $skipped;
+    public array $skipped;
 
     /**
      * @param list<Jwk> $keys The keys, in order
@@ -148,7 +152,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
      *
      * Each entry of `keys` is given to `Jwk::fromJson()` with the same
      * `$publicOnly`. One that is not an object, or that `fromJson()`
-     * refuses, is set aside in `skipped()` with its position and the
+     * refuses, is set aside in `$skipped` with its position and the
      * refusal, and the rest of the set is usable.
      *
      * @param array<array-key, mixed> | string | JsonSerializable | stdClass $json
@@ -229,28 +233,6 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
     }
 
     /**
-     * Returns the keys, in the order received
-     *
-     * @return list<Jwk>
-     */
-    public function keys(): array
-    {
-        return $this->keys;
-    }
-
-    /**
-     * Returns the members of the received `keys` array that `fromJson()`
-     * could not use, each with its position and the refusal; a set built in
-     * code has none
-     *
-     * @return list<SkippedKey>
-     */
-    public function skipped(): array
-    {
-        return $this->skipped;
-    }
-
-    /**
      * Returns the number of keys
      */
     public function count(): int
@@ -259,6 +241,8 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
     }
 
     /**
+     * Returns the keys, in the order received
+     *
      * @return Traversable<int, Jwk>
      */
     public function getIterator(): Traversable
@@ -289,11 +273,10 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
 
         if (count($matches) > 1) {
             throw new AmbiguousKeyId(sprintf(
-                '%d keys%s have the key identifier "%s"%s',
-                count($matches),
-                $keyType === null ? '' : ' of type ' . $keyType->value,
+                'Key identifier "%s" names %d keys%s',
                 $keyId,
-                $keyType === null ? '; pass the key type to choose among them' : '',
+                count($matches),
+                $keyType === null ? '; pass the key type to choose among them' : ' of type ' . $keyType->value,
             ));
         }
 
@@ -343,7 +326,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
     }
 
     /**
-     * Returns the set without the key, which is the instance `keys()` or a
+     * Returns the set without the key, which is the instance iteration or a
      * lookup returned, or an equal set when it holds no such instance
      */
     public function withoutKey(Jwk $key): self

@@ -64,11 +64,12 @@ final class JwkSetTest extends TestCase
         $fixture = self::fixture($file);
         $set = JwkSet::fromJson(self::fixtureJson($file));
 
+        $keys = iterator_to_array($set);
+
         $this->assertCount(2, $set);
-        $this->assertSame([], $set->skipped());
-        $this->assertSame($classes, array_map(static fn (Jwk $key): string => $key::class, $set->keys()));
-        $this->assertSame($keyIds, array_map(static fn (Jwk $key): ?string => $key->keyId, $set->keys()));
-        $this->assertSame($set->keys(), iterator_to_array($set));
+        $this->assertSame([], $set->skipped);
+        $this->assertSame($classes, array_map(static fn (Jwk $key): string => $key::class, $keys));
+        $this->assertSame($keyIds, array_map(static fn (Jwk $key): ?string => $key->keyId, $keys));
         $this->assertSame([], $set->additionalMembers());
         $this->assertEquals($fixture, $set->jsonSerialize());
         $this->assertEquals($fixture, json_decode($set->toJson(), true, 512, JSON_THROW_ON_ERROR));
@@ -336,10 +337,10 @@ final class JwkSetTest extends TestCase
         $this->assertCount(3, $set);
         $this->assertSame(
             [EcKey::class, OctKey::class, OkpKey::class],
-            array_map(static fn (Jwk $key): string => $key::class, $set->keys()),
+            array_map(static fn (Jwk $key): string => $key::class, iterator_to_array($set)),
         );
 
-        $skipped = $set->skipped();
+        $skipped = $set->skipped;
         $this->assertSame(
             [1, 2, 4, 5, 6, 7, 8, 9],
             array_map(static fn (SkippedKey $skipped): int => $skipped->index, $skipped),
@@ -365,6 +366,19 @@ final class JwkSetTest extends TestCase
         $this->assertSame('kty', $skipped[7]->cause->member);
     }
 
+    public function testSkipsAKeyWithAnEmptyKeyOperationsArrayAndKeepsTheRest(): void
+    {
+        $okp = self::fixture('rfc8037/appendix-a2.json');
+
+        $set = JwkSet::fromJson(['keys' => [[...$okp, 'key_ops' => []], $okp]]);
+
+        $this->assertCount(1, $set);
+        $this->assertCount(1, $set->skipped);
+        $this->assertSame(0, $set->skipped[0]->index);
+        $this->assertSame(InvalidJwkReason::EmptyKeyOperations, $set->skipped[0]->cause->reason);
+        $this->assertSame('key_ops', $set->skipped[0]->cause->member);
+    }
+
     public function testSkipsAMemberOfTheWrongJsonTypeAndKeepsTheRest(): void
     {
         $ec = self::fixture('rfc7517/section-3.json');
@@ -374,10 +388,10 @@ final class JwkSetTest extends TestCase
 
         $this->assertSame(
             [EcKey::class, OkpKey::class],
-            array_map(static fn (Jwk $key): string => $key::class, $set->keys()),
+            array_map(static fn (Jwk $key): string => $key::class, iterator_to_array($set)),
         );
 
-        $skipped = $set->skipped();
+        $skipped = $set->skipped;
         $this->assertCount(1, $skipped);
         $this->assertSame(1, $skipped[0]->index);
         $this->assertSame(InvalidJwkReason::WrongType, $skipped[0]->cause->reason);
@@ -390,14 +404,14 @@ final class JwkSetTest extends TestCase
         $this->assertCount(0, $set);
         $this->assertSame(
             [InvalidJwkReason::PrivateMembersPresent, InvalidJwkReason::PrivateMembersPresent],
-            array_map(static fn (SkippedKey $skipped): InvalidJwkReason => $skipped->cause->reason, $set->skipped()),
+            array_map(static fn (SkippedKey $skipped): InvalidJwkReason => $skipped->cause->reason, $set->skipped),
         );
 
         $set = JwkSet::fromJson(self::fixtureJson('rfc7517/appendix-a3.json'), publicOnly: true);
         $this->assertCount(0, $set);
         $this->assertSame(
             [InvalidJwkReason::SymmetricKey, InvalidJwkReason::SymmetricKey],
-            array_map(static fn (SkippedKey $skipped): InvalidJwkReason => $skipped->cause->reason, $set->skipped()),
+            array_map(static fn (SkippedKey $skipped): InvalidJwkReason => $skipped->cause->reason, $set->skipped),
         );
 
         $this->assertCount(2, JwkSet::fromJson(self::fixtureJson('rfc7517/appendix-a1.json'), publicOnly: true));
@@ -412,10 +426,12 @@ final class JwkSetTest extends TestCase
         ],
         ]);
 
+        $keys = iterator_to_array($set);
+
         $this->assertCount(3, $set);
-        $this->assertSame([], $set->skipped());
-        $this->assertInstanceOf(OctKey::class, $set->keys()[0]);
-        $this->assertInstanceOf(EcKey::class, $set->keys()[1]);
+        $this->assertSame([], $set->skipped);
+        $this->assertInstanceOf(OctKey::class, $keys[0]);
+        $this->assertInstanceOf(EcKey::class, $keys[1]);
     }
 
     public function testFindsAKeyByItsIdentifier(): void
@@ -428,7 +444,7 @@ final class JwkSetTest extends TestCase
         $this->assertNull($set->findByKeyId('1', KeyType::Rsa));
         $this->assertNull($set->findByKeyId('2'));
         $this->assertNull($set->findByKeyId(''));
-        $this->assertSame([$set->keys()[0]], $set->findAllByKeyId('1'));
+        $this->assertSame([iterator_to_array($set)[0]], $set->findAllByKeyId('1'));
         $this->assertSame([], $set->findAllByKeyId('2'));
     }
 
@@ -447,7 +463,7 @@ final class JwkSetTest extends TestCase
             $this->fail('Expected AmbiguousKeyId');
         } catch (AmbiguousKeyId $exception) {
             $this->assertSame(
-                '2 keys have the key identifier "1"; pass the key type to choose among them',
+                'Key identifier "1" names 2 keys; pass the key type to choose among them',
                 $exception->getMessage(),
             );
         }
@@ -462,7 +478,7 @@ final class JwkSetTest extends TestCase
             $set->findByKeyId('1', KeyType::Ec);
             $this->fail('Expected AmbiguousKeyId');
         } catch (AmbiguousKeyId $exception) {
-            $this->assertSame('3 keys of type EC have the key identifier "1"', $exception->getMessage());
+            $this->assertSame('Key identifier "1" names 3 keys of type EC', $exception->getMessage());
         }
     }
 
@@ -488,17 +504,19 @@ final class JwkSetTest extends TestCase
         $set = JwkSet::fromJson(self::fixtureJson('rfc7517/appendix-a1.json'));
         $oct = Jwk::fromJson(self::fixture('rfc7520/section-3.5.json'));
 
+        $keys = iterator_to_array($set);
+
         $added = $set->withKey($oct);
         $this->assertCount(3, $added);
-        $this->assertSame($oct, $added->keys()[2]);
+        $this->assertSame($oct, iterator_to_array($added)[2]);
         $this->assertCount(2, $set);
 
-        $removed = $added->withoutKey($set->keys()[0]);
-        $this->assertSame([$set->keys()[1], $oct], $removed->keys());
+        $removed = $added->withoutKey($keys[0]);
+        $this->assertSame([$keys[1], $oct], iterator_to_array($removed));
         $this->assertCount(3, $added);
 
         $equalButDifferent = Jwk::fromJson(self::fixture('rfc7520/section-3.5.json'));
-        $this->assertSame($removed->keys(), $removed->withoutKey($equalButDifferent)->keys());
+        $this->assertSame(iterator_to_array($removed), iterator_to_array($removed->withoutKey($equalButDifferent)));
     }
 
     public function testTheChangedSetsKeepTheSkippedMembersAndTheOtherMembers(): void
@@ -508,7 +526,7 @@ final class JwkSetTest extends TestCase
 
         $changed = $set->withKey($oct)->withoutKey($oct);
 
-        $this->assertCount(1, $changed->skipped());
+        $this->assertCount(1, $changed->skipped);
         $this->assertSame(['issuer' => 'https://example.com'], $changed->additionalMembers());
         $this->assertSame('{"keys":[],"issuer":"https://example.com"}', $changed->toJson());
     }
