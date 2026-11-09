@@ -114,6 +114,8 @@ final class MemberReader
                 /** @var mixed $json */
                 $json = json_decode($json, false, flags: JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
+                // The JsonException is not passed as the previous exception:
+                // its trace holds the JSON text, which may be a private key.
                 throw new InvalidJwk(
                     InvalidJwkReason::MalformedJson,
                     'The JSON text does not parse: ' . $exception->getMessage(),

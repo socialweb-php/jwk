@@ -183,6 +183,8 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
                 /** @var mixed $json */
                 $json = json_decode($json, false, JsonValue::MAX_DEPTH + 3, JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
+                // The JsonException is not passed as the previous exception:
+                // its trace holds the JSON text, which may be a private key.
                 throw new InvalidJwkSet(
                     InvalidJwkSetReason::MalformedJson,
                     'The JSON text does not parse: ' . $exception->getMessage(),
