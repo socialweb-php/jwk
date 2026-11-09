@@ -24,6 +24,7 @@ use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\HashAlgorithm;
 use SocialWeb\Jwk\Jwk;
+use SocialWeb\Jwk\JwkSet;
 use SocialWeb\Jwk\KeyOperation;
 use SocialWeb\Jwk\KeyUse;
 use SocialWeb\Jwk\OctKey;
@@ -565,6 +566,29 @@ final class JwkTest extends TestCase
             . '"x5t":"AAAA","x5t#S256":"BBBB","ext":true,"another":1}',
             $key->toJson(),
         );
+    }
+
+    public function testWritesACharacterOutsideAsciiAsItself(): void
+    {
+        $key = new OctKey("\x01", keyId: 'clé', additionalMembers: ['note' => 'ключ']);
+
+        $this->assertSame('{"kty":"oct","k":"AQ","kid":"clé","note":"ключ"}', $key->toJson());
+        $this->assertSame($key->toJson(), Jwk::fromJson($key->toJson())->toJson());
+    }
+
+    public function testWritesAKeyNestedAsDeepAsItReadsAloneAndInASet(): void
+    {
+        $deepest = [];
+
+        for ($level = 1; $level < 510; $level++) {
+            $deepest = [$deepest];
+        }
+
+        $key = new OctKey("\x01", additionalMembers: ['deep' => $deepest]);
+        $set = new JwkSet([$key]);
+
+        $this->assertSame($key->toJson(), Jwk::fromJson($key->toJson())->toJson());
+        $this->assertSame($set->toJson(), JwkSet::fromJson($set->toJson())->toJson());
     }
 
     public function testOmitsAbsentCommonMembersAndEmptyLists(): void

@@ -180,6 +180,13 @@ final class JwkSetTest extends TestCase
         );
     }
 
+    public function testWritesACharacterOutsideAsciiAsItself(): void
+    {
+        $set = JwkSet::fromJson('{"keys":[],"issuer":"https://example.com/clé"}');
+
+        $this->assertSame('{"keys":[],"issuer":"https://example.com/clé"}', $set->toJson());
+    }
+
     public function testHandsOutCopiesOfTheAdditionalMembers(): void
     {
         $meta = new stdClass();

@@ -28,6 +28,7 @@ final class OtherPrimeInfoTest extends TestCase
         $this->assertSame("\x03", $info->factorCrtExponent);
         $this->assertSame("\x04\x05\x06", $info->factorCrtCoefficient);
         $this->assertSame(['r' => 'AQI', 'd' => 'Aw', 't' => 'BAUG'], $info->jsonSerialize());
+        $this->assertSame('{"r":"AQI","d":"Aw","t":"BAUG"}', $info->toJson());
     }
 
     public function testRefusesAnEmptyPrimeFactor(): void
@@ -145,7 +146,7 @@ final class OtherPrimeInfoTest extends TestCase
     {
         $this->expectException(LogicException::class);
         $this->expectExceptionMessageIsOrContains(
-            'An "oth" entry cannot be serialized with serialize(); use the toJson() of its key',
+            'An "oth" entry cannot be serialized with serialize(); use toJson()',
         );
 
         serialize(new OtherPrimeInfo("\x01\x02", "\x03", "\x04"));

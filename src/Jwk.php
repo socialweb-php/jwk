@@ -52,6 +52,7 @@ use function strspn;
 use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_SLASHES;
+use const JSON_UNESCAPED_UNICODE;
 
 /**
  * A JSON Web Key, per RFC 7517: one cryptographic key as a JSON object
@@ -358,15 +359,20 @@ abstract readonly class Jwk implements JsonSerializable
      * Returns the JWK as JSON text
      *
      * A number with a zero fraction, such as `1.0`, is written as it was
-     * received, not as an integer.
+     * received, not as an integer, and a character outside ASCII is written
+     * as itself, not as an escape sequence.
      *
      * Every key the package accepts can be written: its strings are valid
      * UTF-8, its numbers are finite, and its nesting is no deeper than
-     * `json_decode()` reads.
+     * `json_decode()` reads, which is the depth passed here.
      */
     public function toJson(): string
     {
-        return json_encode($this, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+        return json_encode(
+            $this,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION,
+            JsonValue::MAX_DEPTH + 1,
+        );
     }
 
     /**

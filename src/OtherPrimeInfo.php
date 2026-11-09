@@ -32,7 +32,13 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 
+use function json_encode;
 use function sprintf;
+
+use const JSON_PRESERVE_ZERO_FRACTION;
+use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
+use const JSON_UNESCAPED_UNICODE;
 
 /**
  * One entry of the `oth` member of an RSA private key, per RFC 7518
@@ -103,6 +109,18 @@ final readonly class OtherPrimeInfo implements JsonSerializable
     }
 
     /**
+     * Returns the entry as JSON text, an object of the three members
+     */
+    public function toJson(): string
+    {
+        return json_encode(
+            $this,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION,
+            1,
+        );
+    }
+
+    /**
      * Returns what `var_dump()` and `print_r()` show: every member
      * redacted, since every member is private
      *
@@ -115,14 +133,13 @@ final readonly class OtherPrimeInfo implements JsonSerializable
 
     /**
      * Refuses PHP serialization, which would write private members to a
-     * string the caller did not ask for; the JSON form of the key is the
-     * serialization
+     * string the caller did not ask for; the JSON form is the serialization
      *
      * @return array{}
      */
     public function __serialize(): array
     {
-        throw new LogicException('An "oth" entry cannot be serialized with serialize(); use the toJson() of its key');
+        throw new LogicException('An "oth" entry cannot be serialized with serialize(); use toJson()');
     }
 
     /**

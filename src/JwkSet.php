@@ -57,6 +57,7 @@ use function sprintf;
 use const JSON_PRESERVE_ZERO_FRACTION;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_SLASHES;
+use const JSON_UNESCAPED_UNICODE;
 
 /**
  * A JWK Set, per RFC 7517 section 5: a JSON object whose `keys` member is
@@ -141,7 +142,9 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
      * array is a JSON object. A `JsonSerializable` is read as what its
      * `jsonSerialize()` returns, so a set is read from another set, which
      * gives an equal set. PHP's parser keeps the lexically last of two
-     * members with one name, which RFC 7517 section 5 allows.
+     * members with one name, which RFC 7517 section 5 allows. JSON text is
+     * decoded two levels deeper than a key's, since a key sits two levels
+     * below the set object, so every set the package writes reads back.
      *
      * Each entry of `keys` is given to `Jwk::fromJson()` with the same
      * `$publicOnly`. One that is not an object, or that `fromJson()`
@@ -172,7 +175,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
         if (is_string($json)) {
             try {
                 /** @var mixed $json */
-                $json = json_decode($json, false, flags: JSON_THROW_ON_ERROR);
+                $json = json_decode($json, false, JsonValue::MAX_DEPTH + 3, JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
                 throw new InvalidJwkSet(
                     InvalidJwkSetReason::MalformedJson,
@@ -405,14 +408,20 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
     }
 
     /**
-     * Returns the set as JSON text
+     * Returns the set as JSON text, written as `Jwk::toJson()` writes a key
      *
      * Every set the package accepts can be written: its keys can be, and
-     * its additional members are checked as a key's are.
+     * its additional members are checked as a key's are. A key sits two
+     * levels below the set object, so the depth passed here is two more
+     * than a key's.
      */
     public function toJson(): string
     {
-        return json_encode($this, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+        return json_encode(
+            $this,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION,
+            JsonValue::MAX_DEPTH + 3,
+        );
     }
 
     /**
