@@ -37,12 +37,14 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\Exception\InvalidJwkSet;
+use SocialWeb\Jwk\Exception\InvalidJwkSetReason;
 use Traversable;
 use stdClass;
 
 use function array_is_list;
 use function array_key_exists;
 use function count;
+use function get_debug_type;
 use function get_object_vars;
 use function hash_equals;
 use function is_array;
@@ -93,12 +95,12 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
      *     `stdClass` or a PHP array that is not a list, and a JSON array is
      *     a PHP list
      *
-     * @throws InvalidJwkSet when the keys are not a list of `Jwk` objects,
-     *     or when an additional member holds a value JSON text cannot hold,
-     *     as `Jwk::fromJson()` refuses it; the refusal is the previous
-     *     exception
-     * @throws InvalidArgument when an additional member is named `keys`, or
-     *     holds a value of a PHP type that is not a JSON type
+     * @throws InvalidArgument when the keys are not a list of `Jwk` objects,
+     *     when an additional member is named `keys`, or when an additional
+     *     member holds a value of a PHP type that is not a JSON type
+     * @throws InvalidJwkSet with `MalformedJson` when an additional member
+     *     holds content JSON text cannot express, as `Jwk::fromJson()`
+     *     refuses it; the refusal is the previous exception
      */
     public function __construct(
         private array $keys,
@@ -107,12 +109,12 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
         JsonValue::checkTypes($additionalMembers);
 
         if (!array_is_list($keys)) {
-            throw new InvalidJwkSet('The keys must be a list of Jwk objects');
+            throw new InvalidArgument('keys must be a list of Jwk objects');
         }
 
         foreach ($keys as $key) {
             if (!$key instanceof Jwk) {
-                throw new InvalidJwkSet('The keys must be a list of Jwk objects');
+                throw new InvalidArgument('keys must be a list of Jwk objects');
             }
         }
 
@@ -130,13 +132,15 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
     }
 
     /**
-     * Parses a JWK Set from JSON text or from a value the text was already
-     * decoded into
+     * Parses a JWK Set from JSON text, from a value the text was already
+     * decoded into, or from a `JsonSerializable`
      *
      * A decoded value is an array or a tree of `stdClass` objects, as
      * `json_decode()` gives either. In an array, a PHP array that is a
      * list, including an empty array, is a JSON array, and any other PHP
-     * array is a JSON object. PHP's parser keeps the lexically last of two
+     * array is a JSON object. A `JsonSerializable` is read as what its
+     * `jsonSerialize()` returns, so a set is read from another set, which
+     * gives an equal set. PHP's parser keeps the lexically last of two
      * members with one name, which RFC 7517 section 5 allows.
      *
      * Each entry of `keys` is given to `Jwk::fromJson()` with the same
@@ -144,27 +148,47 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
      * refuses, is set aside in `skipped()` with its position and the
      * refusal, and the rest of the set is usable.
      *
-     * @param string | array<array-key, mixed> | stdClass $json
+     * @param array<array-key, mixed> | string | JsonSerializable | stdClass $json
      *
-     * @throws InvalidJwkSet when the text does not parse, the value is not
-     *     an object, the object has no `keys` member, `keys` is not an
-     *     array, or another member holds a value JSON text cannot hold
+     * @throws InvalidArgument for a value whose PHP type is not a JSON type
+     *     anywhere in the document, such as an object of a class other
+     *     than `stdClass`, a closure, or a resource, before any entry is
+     *     read; such a value is never a skipped key
+     * @throws InvalidJwkSet with `MalformedJson` when the text does not
+     *     parse or another member holds content JSON text cannot express;
+     *     with `NotAnObject` when the value is not an object; with
+     *     `MissingKeysMember` when the object has no `keys` member; or with
+     *     `KeysNotAnArray` when `keys` is not an array
      */
     public static function fromJson(
-        #[SensitiveParameter] string | array | stdClass $json,
+        #[SensitiveParameter] array | string | JsonSerializable | stdClass $json,
         bool $publicOnly = false,
     ): self {
+        if ($json instanceof JsonSerializable) {
+            /** @var mixed $json */
+            $json = $json->jsonSerialize();
+        }
+
         if (is_string($json)) {
             try {
                 /** @var mixed $json */
                 $json = json_decode($json, false, flags: JSON_THROW_ON_ERROR);
             } catch (JsonException $exception) {
-                throw new InvalidJwkSet('The JSON text does not parse: ' . $exception->getMessage());
+                throw new InvalidJwkSet(
+                    InvalidJwkSetReason::MalformedJson,
+                    'The JSON text does not parse: ' . $exception->getMessage(),
+                );
             }
         }
 
-        if (is_object($json) ? $json::class !== stdClass::class : (!is_array($json) || array_is_list($json))) {
-            throw new InvalidJwkSet('The JSON value is not an object');
+        if (is_object($json) && !$json instanceof stdClass) {
+            throw new InvalidArgument(sprintf('A value of type %s cannot be read as JSON', get_debug_type($json)));
+        }
+
+        JsonValue::checkTypes($json);
+
+        if (!$json instanceof stdClass && (!is_array($json) || array_is_list($json))) {
+            throw new InvalidJwkSet(InvalidJwkSetReason::NotAnObject, 'The JSON value is not an object');
         }
 
         // A PHP array is cast to an object so that both forms are read the
@@ -173,7 +197,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
         $members = get_object_vars((object) $json);
 
         if (!array_key_exists('keys', $members)) {
-            throw new InvalidJwkSet('The "keys" member is required');
+            throw new InvalidJwkSet(InvalidJwkSetReason::MissingKeysMember, 'The "keys" member is required');
         }
 
         /** @var mixed $entries */
@@ -181,7 +205,7 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
         unset($members['keys']);
 
         if (!is_array($entries) || !array_is_list($entries)) {
-            throw new InvalidJwkSet('The "keys" member must be an array');
+            throw new InvalidJwkSet(InvalidJwkSetReason::KeysNotAnArray, 'The "keys" member must be an array');
         }
 
         $keys = [];
@@ -434,7 +458,8 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
 
     /**
      * @throws InvalidArgument when the name is `keys`
-     * @throws InvalidJwkSet for a name that JSON text cannot hold
+     * @throws InvalidJwkSet with `MalformedJson` for a name that JSON text
+     *     cannot hold
      */
     private static function checkAdditionalMemberName(string $name): void
     {
@@ -445,19 +470,22 @@ final readonly class JwkSet implements Countable, IteratorAggregate, JsonSeriali
         try {
             JsonValue::checkName($name, null);
         } catch (InvalidJwk $exception) {
-            throw new InvalidJwkSet($exception->getMessage(), 0, $exception);
+            throw new InvalidJwkSet(InvalidJwkSetReason::MalformedJson, $exception->getMessage(), $exception);
         }
     }
 
     /**
-     * @throws InvalidJwkSet when the value is one JSON text cannot hold
+     * @throws InvalidArgument when the value holds a value of a PHP type
+     *     that is not a JSON type
+     * @throws InvalidJwkSet with `MalformedJson` when the value holds
+     *     content JSON text cannot express
      */
     private static function readAdditionalMember(string $name, #[SensitiveParameter] mixed $value): mixed
     {
         try {
             return JsonValue::read($name, $value);
         } catch (InvalidJwk $exception) {
-            throw new InvalidJwkSet($exception->getMessage(), 0, $exception);
+            throw new InvalidJwkSet(InvalidJwkSetReason::MalformedJson, $exception->getMessage(), $exception);
         }
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SocialWeb\Test\Jwk;
 
 use DateTimeImmutable;
+use JsonSerializable;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
@@ -14,6 +15,7 @@ use SocialWeb\Jwk\Exception\InvalidArgument;
 use SocialWeb\Jwk\Exception\InvalidJwk;
 use SocialWeb\Jwk\Exception\InvalidJwkReason;
 use SocialWeb\Jwk\Exception\InvalidJwkSet;
+use SocialWeb\Jwk\Exception\InvalidJwkSetReason;
 use SocialWeb\Jwk\HashAlgorithm;
 use SocialWeb\Jwk\Jwk;
 use SocialWeb\Jwk\JwkSet;
@@ -29,6 +31,8 @@ use function array_map;
 use function iterator_to_array;
 use function json_decode;
 use function serialize;
+use function sprintf;
+use function str_repeat;
 use function unserialize;
 
 use const INF;
@@ -81,6 +85,75 @@ final class JwkSetTest extends TestCase
 
         $this->assertSame($fromText->toJson(), $fromArray->toJson());
         $this->assertSame($fromText->toJson(), $fromObjects->toJson());
+    }
+
+    public function testFromJsonTakesAJsonSerializableAsWhatItSerializesTo(): void
+    {
+        $set = JwkSet::fromJson(self::fixtureJson('rfc7517/appendix-a1.json'));
+        $serializable = new class ($set->jsonSerialize()) implements JsonSerializable {
+            /**
+             * @param array<string, mixed> $value
+             */
+            public function __construct(private readonly array $value)
+            {
+            }
+
+            public function jsonSerialize(): mixed
+            {
+                return $this->value;
+            }
+        };
+
+        $this->assertSame($set->toJson(), JwkSet::fromJson($set)->toJson());
+        $this->assertSame($set->toJson(), JwkSet::fromJson($serializable)->toJson());
+    }
+
+    public function testRefusesAValueOfATypeJsonCannotHoldBeforeReadingAnyEntry(): void
+    {
+        $ec = self::fixture('rfc7517/section-3.json');
+        $attempts = [
+            'a stdClass subclass' => [
+                new class extends stdClass {
+                    /** @var array<never, never> */
+                    public array $keys = [];
+                },
+                'stdClass@anonymous',
+            ],
+            'a closure in a keys entry after a malformed one' => [
+                ['keys' => [[...$ec, 'x' => "\xff"], [...$ec, 'ext' => static fn (): int => 1]]],
+                'Closure',
+            ],
+            'a date in another member' => [['keys' => [], 'when' => new DateTimeImmutable()], 'DateTimeImmutable'],
+        ];
+
+        foreach ($attempts as $label => [$json, $type]) {
+            try {
+                JwkSet::fromJson($json);
+                $this->fail('Expected InvalidArgument for ' . $label);
+            } catch (InvalidArgument $exception) {
+                $this->assertSame(
+                    sprintf('A value of type %s cannot be read as JSON', $type),
+                    $exception->getMessage(),
+                    $label,
+                );
+            }
+        }
+    }
+
+    public function testASetTextNestedDeeperThanAKeyMayBeIsMalformed(): void
+    {
+        $deep = str_repeat('[', 511) . str_repeat(']', 511);
+
+        try {
+            JwkSet::fromJson('{"keys":[{"kty":"oct","k":"AQ","deep":' . $deep . '}]}');
+            $this->fail('Expected InvalidJwkSet');
+        } catch (InvalidJwkSet $exception) {
+            $this->assertSame(InvalidJwkSetReason::MalformedJson, $exception->reason);
+            $this->assertSame(
+                'The JSON text does not parse: Maximum stack depth exceeded',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testWritesAnEmptySetAsAnEmptyKeysArray(): void
@@ -140,50 +213,82 @@ final class JwkSetTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string | array<array-key, mixed> | stdClass, string}>
+     * @return iterable<string, array{string | array<array-key, mixed>, InvalidJwkSetReason, string}>
      */
     public static function invalidSets(): iterable
     {
-        yield 'malformed text' => ['{"keys":', 'The JSON text does not parse: Syntax error'];
-        yield 'a JSON array' => ['[]', 'The JSON value is not an object'];
-        yield 'a JSON string' => ['"keys"', 'The JSON value is not an object'];
-        yield 'a PHP list' => [[['kty' => 'oct', 'k' => 'AQ']], 'The JSON value is not an object'];
-        yield 'an empty PHP array' => [[], 'The JSON value is not an object'];
-        yield 'a stdClass subclass' => [
-            new class extends stdClass {
-                /** @var array<never, never> */
-                public array $keys = [];
-            },
+        yield 'malformed text' => [
+            '{"keys":',
+            InvalidJwkSetReason::MalformedJson,
+            'The JSON text does not parse: Syntax error',
+        ];
+        yield 'a JSON array' => ['[]', InvalidJwkSetReason::NotAnObject, 'The JSON value is not an object'];
+        yield 'a JSON string' => ['"keys"', InvalidJwkSetReason::NotAnObject, 'The JSON value is not an object'];
+        yield 'JSON null' => ['null', InvalidJwkSetReason::NotAnObject, 'The JSON value is not an object'];
+        yield 'a PHP list' => [
+            [['kty' => 'oct', 'k' => 'AQ']],
+            InvalidJwkSetReason::NotAnObject,
             'The JSON value is not an object',
         ];
-        yield 'no keys member' => ['{"kty":"oct"}', 'The "keys" member is required'];
-        yield 'keys as an object' => ['{"keys":{}}', 'The "keys" member must be an array'];
-        yield 'keys as a string' => ['{"keys":"none"}', 'The "keys" member must be an array'];
-        yield 'keys as null' => ['{"keys":null}', 'The "keys" member must be an array'];
+        yield 'an empty PHP array' => [[], InvalidJwkSetReason::NotAnObject, 'The JSON value is not an object'];
+        yield 'no keys member' => [
+            '{"kty":"oct"}',
+            InvalidJwkSetReason::MissingKeysMember,
+            'The "keys" member is required',
+        ];
+        yield 'keys as an object' => [
+            '{"keys":{}}',
+            InvalidJwkSetReason::KeysNotAnArray,
+            'The "keys" member must be an array',
+        ];
+        yield 'keys as a string' => [
+            '{"keys":"none"}',
+            InvalidJwkSetReason::KeysNotAnArray,
+            'The "keys" member must be an array',
+        ];
+        yield 'keys as null' => [
+            '{"keys":null}',
+            InvalidJwkSetReason::KeysNotAnArray,
+            'The "keys" member must be an array',
+        ];
         yield 'keys as a keyed PHP array' => [
             ['keys' => ['a' => ['kty' => 'oct', 'k' => 'AQ']]],
+            InvalidJwkSetReason::KeysNotAnArray,
             'The "keys" member must be an array',
         ];
         yield 'another member that is not UTF-8' => [
             ['keys' => [], 'issuer' => "\xff"],
+            InvalidJwkSetReason::MalformedJson,
             'The "issuer" member holds a string that is not valid UTF-8',
+        ];
+        yield 'another member that is not finite' => [
+            ['keys' => [], 'n' => INF],
+            InvalidJwkSetReason::MalformedJson,
+            'The "n" member holds a number that is not finite',
         ];
         yield 'a member name that starts with NUL' => [
             ['keys' => [], "\0x" => 1],
+            InvalidJwkSetReason::MalformedJson,
             'A member name starts with a NUL byte',
         ];
     }
 
     /**
-     * @param string | array<array-key, mixed> | stdClass $json
+     * @param string | array<array-key, mixed> $json
      */
     #[DataProvider('invalidSets')]
-    public function testRefusesASetObjectThatIsNotWellFormed(string | array | stdClass $json, string $message): void
-    {
-        $this->expectException(InvalidJwkSet::class);
-        $this->expectExceptionMessageIsOrContains($message);
-
-        JwkSet::fromJson($json);
+    public function testRefusesASetObjectThatIsNotWellFormed(
+        string | array $json,
+        InvalidJwkSetReason $reason,
+        string $message,
+    ): void {
+        try {
+            JwkSet::fromJson($json);
+            $this->fail('Expected InvalidJwkSet');
+        } catch (InvalidJwkSet $exception) {
+            $this->assertSame($reason, $exception->reason);
+            $this->assertSame($message, $exception->getMessage());
+        }
     }
 
     public function testTheRefusalOfAnotherMemberKeepsTheKeysRefusalAsItsCause(): void
@@ -192,6 +297,7 @@ final class JwkSetTest extends TestCase
             JwkSet::fromJson(['keys' => [], 'issuer' => "\xff"]);
             $this->fail('Expected InvalidJwkSet');
         } catch (InvalidJwkSet $exception) {
+            $this->assertSame(InvalidJwkSetReason::MalformedJson, $exception->reason);
             $previous = $exception->getPrevious();
             $this->assertInstanceOf(InvalidJwk::class, $previous);
             $this->assertSame(InvalidJwkReason::MalformedJson, $previous->reason);
@@ -417,8 +523,8 @@ final class JwkSetTest extends TestCase
     #[DataProvider('invalidKeyLists')]
     public function testTheConstructorRefusesAnythingButAListOfKeys(array $keys): void
     {
-        $this->expectException(InvalidJwkSet::class);
-        $this->expectExceptionMessageIsOrContains('The keys must be a list of Jwk objects');
+        $this->expectException(InvalidArgument::class);
+        $this->expectExceptionMessageIsOrContains('keys must be a list of Jwk objects');
 
         new ReflectionClass(JwkSet::class)->newInstance($keys);
     }
@@ -455,6 +561,7 @@ final class JwkSetTest extends TestCase
             new JwkSet([], $members);
             $this->fail('Expected InvalidJwkSet');
         } catch (InvalidJwkSet $exception) {
+            $this->assertSame(InvalidJwkSetReason::MalformedJson, $exception->reason);
             $previous = $exception->getPrevious();
             $this->assertInstanceOf(InvalidJwk::class, $previous);
             $this->assertSame($reason, $previous->reason);

@@ -25,15 +25,24 @@ declare(strict_types=1);
 
 namespace SocialWeb\Jwk\Exception;
 
+use Throwable;
 use UnexpectedValueException;
 
 /**
- * Thrown when an input is not a well-formed JWK Set: it is not an object,
- * it lacks the `keys` member, or `keys` is not an array
+ * Thrown when an input is not a well-formed JWK Set
  *
- * A member of the set that is not a usable key is never this; the set
- * records it as skipped.
+ * The reason says which rule the input broke: the text does not parse, the
+ * value is not an object, it lacks the `keys` member, or `keys` is not an
+ * array. A member of the set that is not a usable key is never this; the
+ * set records it as skipped.
  */
 final class InvalidJwkSet extends UnexpectedValueException implements JwkException
 {
+    public function __construct(
+        public readonly InvalidJwkSetReason $reason,
+        string $message,
+        ?Throwable $previous = null,
+    ) {
+        parent::__construct($message, 0, $previous);
+    }
 }
