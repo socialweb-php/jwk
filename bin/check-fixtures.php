@@ -88,12 +88,24 @@ if ($json === false) {
     $fail(sprintf('Cannot read %s', $manifestFile));
 }
 
-/**
- * @var array{sets: list<array{name: string, sha256: string}>} $manifest
- */
+/** @var mixed $manifest */
 $manifest = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+
+if (!is_array($manifest) || !isset($manifest['sets']) || !is_array($manifest['sets'])) {
+    $fail(sprintf('%s: the "sets" member is missing or is not a list', $manifestFile));
+}
+
+if (!array_is_list($manifest['sets'])) {
+    $fail(sprintf('%s: the "sets" member is not a list', $manifestFile));
+}
+
+if ($manifest['sets'] === []) {
+    $fail(sprintf('%s: the "sets" list is empty, so there is nothing to check', $manifestFile));
+}
+
 $failed = false;
 
+/** @var array{name: string, sha256: string} $set */
 foreach ($manifest['sets'] as $set) {
     $base = $resourcesDirectory . '/' . $set['name'];
 
