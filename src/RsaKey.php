@@ -524,6 +524,8 @@ final readonly class RsaKey extends Jwk
             );
         }
 
+        OpenSsl::drainErrors();
+
         return $key;
     }
 
@@ -551,6 +553,7 @@ final readonly class RsaKey extends Jwk
         );
 
         $signature = '';
+        OpenSsl::drainErrors();
 
         if (
             !@openssl_sign(self::PAIR_CHECK_MESSAGE, $signature, $key, OPENSSL_ALGO_SHA256)
@@ -565,6 +568,8 @@ final readonly class RsaKey extends Jwk
                 'd',
             );
         }
+
+        OpenSsl::drainErrors();
 
         $private = $this->privateMembers();
 

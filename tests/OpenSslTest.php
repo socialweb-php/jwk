@@ -6,6 +6,8 @@ namespace SocialWeb\Test\Jwk;
 
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionMethod;
+use SensitiveParameter;
 use SocialWeb\Jwk\Base64Url;
 use SocialWeb\Jwk\Exception\ConversionFailed;
 use SocialWeb\Jwk\Exception\ConversionFailedReason;
@@ -102,6 +104,26 @@ final class OpenSslTest extends TestCase
 
         $this->assertStringContainsString('error:', $errors);
         $this->assertSame('', OpenSsl::drainErrors());
+    }
+
+    public function testDetailsDrainsTheErrorQueueBeforeAndAfter(): void
+    {
+        $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ed25519.public.pem'), null);
+        @openssl_pkey_get_public('not a key');
+
+        /** @var array{type: int} $details */
+        $details = OpenSsl::details($key);
+
+        $this->assertSame(OPENSSL_KEYTYPE_ED25519, $details['type']);
+        $this->assertFalse(openssl_error_string());
+    }
+
+    public function testPadLeftMarksTheBytesAsSensitive(): void
+    {
+        $parameter = new ReflectionMethod(OpenSsl::class, 'padLeft')->getParameters()[0];
+
+        $this->assertSame('bytes', $parameter->getName());
+        $this->assertCount(1, $parameter->getAttributes(SensitiveParameter::class));
     }
 
     public function testPadsOnTheLeftWithZeroBytes(): void

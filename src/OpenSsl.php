@@ -40,6 +40,7 @@ use function base64_decode;
 use function base64_encode;
 use function chunk_split;
 use function count;
+use function hash_equals;
 use function implode;
 use function in_array;
 use function is_array;
@@ -156,10 +157,12 @@ final class OpenSsl
         /** @var array<string, array<string, mixed>> $details */
         $details = self::details($key);
 
+        // The members are compared in constant time, since the private ones
+        // are secrets.
         foreach ($given as $name => $value) {
             $reported = $details[$type][$name] ?? null;
 
-            if (!is_string($reported) || ltrim($reported, "\0") !== ltrim($value, "\0")) {
+            if (!is_string($reported) || !hash_equals(ltrim($reported, "\0"), ltrim($value, "\0"))) {
                 throw self::refusal($reason, $message, $member);
             }
         }
@@ -174,14 +177,20 @@ final class OpenSsl
      * them
      *
      * @return array<string, mixed>
+     *
+     * @throws LogicException when OpenSSL reports no details, which no key
+     *     it holds makes it do, with OpenSSL's error text when there is any
      */
     public static function details(#[SensitiveParameter] OpenSSLAsymmetricKey $key): array
     {
+        self::drainErrors();
         $details = openssl_pkey_get_details($key);
 
         if ($details === false) {
             throw new LogicException('OpenSSL reported no details for a key it holds: ' . self::drainErrors());
         }
+
+        self::drainErrors();
 
         /** @var array<string, mixed> $details */
         return $details;
@@ -395,7 +404,7 @@ final class OpenSsl
      * coordinate or a scalar whose high byte is zero comes back short of
      * the length its curve fixes.
      */
-    public static function padLeft(string $bytes, int $length): string
+    public static function padLeft(#[SensitiveParameter] string $bytes, int $length): string
     {
         return str_pad($bytes, $length, "\0", STR_PAD_LEFT);
     }
