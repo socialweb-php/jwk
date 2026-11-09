@@ -88,7 +88,7 @@ final readonly class EcKey extends Jwk
         ?string $certificateSha256Thumbprint = null,
         array $additionalMembers = [],
     ) {
-        $curveName = $curve->opensslCurveName() ?? throw new InvalidJwk(
+        $curveName = $curve->openSslCurveName() ?? throw new InvalidJwk(
             InvalidJwkReason::UnsupportedCurve,
             sprintf('The curve %s is not an EC curve', $curve->value),
             'crv',

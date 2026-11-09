@@ -82,7 +82,7 @@ final readonly class OkpKey extends Jwk
         ?string $certificateSha256Thumbprint = null,
         array $additionalMembers = [],
     ) {
-        $detailsKey = $curve->opensslDetailsKey() ?? throw new InvalidJwk(
+        $detailsKey = $curve->openSslDetailsKey() ?? throw new InvalidJwk(
             InvalidJwkReason::UnsupportedCurve,
             sprintf('The curve %s is not an OKP curve', $curve->value),
             'crv',

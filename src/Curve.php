@@ -126,12 +126,13 @@ enum Curve: string
 
     /**
      * Returns the `EC` curve OpenSSL names in the details of a key, or
-     * `null` for a name the package does not implement
+     * `null` for a name the package does not implement, as PHP's own
+     * `tryFrom()` returns `null` for a value no case has
      */
-    public static function fromOpensslCurveName(string $curveName): ?self
+    public static function tryFromOpenSslCurveName(string $curveName): ?self
     {
         foreach ([self::P256, self::P384, self::P521, self::Secp256k1] as $curve) {
-            if ($curve->opensslCurveName() === $curveName) {
+            if ($curve->openSslCurveName() === $curveName) {
                 return $curve;
             }
         }
@@ -144,10 +145,10 @@ enum Curve: string
      * `OPENSSL_KEYTYPE_*` constant, or `null` for any other constant,
      * including `OPENSSL_KEYTYPE_EC`, whose curve is in the key's details
      */
-    public static function fromOpensslKeyType(int $keyType): ?self
+    public static function tryFromOpenSslKeyType(int $keyType): ?self
     {
         foreach ([self::Ed25519, self::Ed448, self::X25519, self::X448] as $curve) {
-            if ($curve->opensslKeyType() === $keyType) {
+            if ($curve->openSslKeyType() === $keyType) {
                 return $curve;
             }
         }
@@ -159,7 +160,7 @@ enum Curve: string
      * Returns the name OpenSSL gives the curve in the details of an `EC`
      * key, or `null` for an `OKP` curve, which OpenSSL treats as a key type
      */
-    public function opensslCurveName(): ?string
+    public function openSslCurveName(): ?string
     {
         return match ($this) {
             self::P256 => 'prime256v1',
@@ -174,7 +175,7 @@ enum Curve: string
      * Returns the `OPENSSL_KEYTYPE_*` constant OpenSSL reports for a key on
      * this curve
      */
-    public function opensslKeyType(): int
+    public function openSslKeyType(): int
     {
         return match ($this) {
             self::P256, self::P384, self::P521, self::Secp256k1 => OPENSSL_KEYTYPE_EC,
@@ -190,7 +191,7 @@ enum Curve: string
      * `openssl_pkey_new()` takes, the members of an `OKP` key, or `null` for
      * an `EC` curve, whose members sit under `ec`
      */
-    public function opensslDetailsKey(): ?string
+    public function openSslDetailsKey(): ?string
     {
         return match ($this) {
             self::Ed25519 => 'ed25519',

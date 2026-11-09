@@ -254,7 +254,7 @@ final class OpenSslKeyReaderTest extends TestCase
         } catch (ConversionFailed $exception) {
             $this->assertSame(ConversionFailedReason::UnsupportedKey, $exception->reason);
             $this->assertSame(
-                'The key is on the EC curve secp224r1, which the package does not implement',
+                'The key is on the EC curve "secp224r1", which the package does not implement',
                 $exception->getMessage(),
             );
         }

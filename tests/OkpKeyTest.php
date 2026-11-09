@@ -157,7 +157,7 @@ final class OkpKeyTest extends TestCase
 
         /** @var array{type: int} $details */
         $details = openssl_pkey_get_details($key->toOpenSslKey());
-        $this->assertSame($curve->opensslKeyType(), $details['type']);
+        $this->assertSame($curve->openSslKeyType(), $details['type']);
     }
 
     /**
@@ -186,9 +186,9 @@ final class OkpKeyTest extends TestCase
 
         /** @var array<string, mixed> $details */
         $details = openssl_pkey_get_details($key->toOpenSslKey());
-        $this->assertSame($curve->opensslKeyType(), $details['type']);
+        $this->assertSame($curve->openSslKeyType(), $details['type']);
         /** @var array{pub_key: string, priv_key: string} $members */
-        $members = $details[(string) $curve->opensslDetailsKey()];
+        $members = $details[(string) $curve->openSslDetailsKey()];
         $this->assertSame(self::hex($publicHex), $members['pub_key']);
         $this->assertSame(self::hex($secretHex), $members['priv_key']);
     }

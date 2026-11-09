@@ -98,7 +98,7 @@ final class EcKeyTest extends TestCase
         /** @var array{type: int, ec: array{curve_name: string, x: string, y: string, d?: string}} $details */
         $details = openssl_pkey_get_details($key->toOpenSslKey());
         $this->assertSame(OPENSSL_KEYTYPE_EC, $details['type']);
-        $this->assertSame($curve->opensslCurveName(), $details['ec']['curve_name']);
+        $this->assertSame($curve->openSslCurveName(), $details['ec']['curve_name']);
         $this->assertSame($key->x, str_pad($details['ec']['x'], $curve->publicKeyLength(), "\0", STR_PAD_LEFT));
         $this->assertSame($private, isset($details['ec']['d']));
     }

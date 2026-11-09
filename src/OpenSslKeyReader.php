@@ -93,10 +93,10 @@ final class OpenSslKeyReader
             return self::ec($details['ec'] ?? []);
         }
 
-        $curve = Curve::fromOpensslKeyType($type);
+        $curve = Curve::tryFromOpenSslKeyType($type);
 
         if ($curve !== null) {
-            $members = $details[$curve->opensslDetailsKey() ?? ''] ?? null;
+            $members = $details[$curve->openSslDetailsKey() ?? ''] ?? null;
 
             return self::okp($curve, is_array($members) ? $members : []);
         }
@@ -159,14 +159,14 @@ final class OpenSslKeyReader
     private static function ec(#[SensitiveParameter] array $members): EcKey
     {
         $curveName = $members['curve_name'] ?? null;
-        $curve = is_string($curveName) ? Curve::fromOpensslCurveName($curveName) : null;
+        $curve = is_string($curveName) ? Curve::tryFromOpenSslCurveName($curveName) : null;
 
         if ($curve === null) {
             throw new ConversionFailed(
                 ConversionFailedReason::UnsupportedKey,
                 $curveName === null
                     ? 'The key is on an EC curve OpenSSL does not name, which the package does not implement'
-                    : sprintf('The key is on the EC curve %s, which the package does not implement', $curveName),
+                    : sprintf('The key is on the EC curve "%s", which the package does not implement', $curveName),
             );
         }
 
