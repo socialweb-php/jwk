@@ -1,0 +1,131 @@
+{
+    "sets": [
+        {
+            "name": "rfc7517",
+            "url": "https://www.rfc-editor.org/rfc/rfc7517",
+            "retrieved": "2026-10-25",
+            "sha256": "a59c5f7fc2300170ff1c8bcc480f9687a7f940b2273d02334e13b4085a83846a",
+            "source": {
+                "title": "RFC 7517: JSON Web Key (JWK)",
+                "url": "https://www.rfc-editor.org/rfc/rfc7517",
+                "copyright": "Copyright (c) 2015 IETF Trust and the persons identified as the document authors. All rights reserved."
+            },
+            "license": {
+                "name": "IETF Trust Legal Provisions",
+                "url": "https://trustee.ietf.org/documents/trust-legal-provisions/"
+            },
+            "sections": [
+                "Section 3",
+                "Appendix A.1",
+                "Appendix A.2",
+                "Appendix A.3",
+                "Appendix B",
+                "Appendix C.1"
+            ]
+        },
+        {
+            "name": "rfc7520",
+            "url": "https://www.rfc-editor.org/rfc/rfc7520",
+            "retrieved": "2026-10-25",
+            "sha256": "7c159735b5ed3756bef2bdfe2313c082a3d5d78b8c5f468bc98e0ad7c622718b",
+            "source": {
+                "title": "RFC 7520: Examples of Protecting Content Using JSON Object Signing and Encryption (JOSE)",
+                "url": "https://www.rfc-editor.org/rfc/rfc7520",
+                "copyright": "Copyright (c) 2015 IETF Trust and the persons identified as the document authors. All rights reserved."
+            },
+            "license": {
+                "name": "IETF Trust Legal Provisions",
+                "url": "https://trustee.ietf.org/documents/trust-legal-provisions/"
+            },
+            "sections": [
+                "Section 3.1",
+                "Section 3.2",
+                "Section 3.3",
+                "Section 3.4",
+                "Section 3.5",
+                "Section 3.6",
+                "Section 5.4 (figures 108 and 111)",
+                "Section 5.5 (figures 120 and 122)"
+            ]
+        },
+        {
+            "name": "rfc7638",
+            "url": "https://www.rfc-editor.org/rfc/rfc7638",
+            "retrieved": "2026-10-25",
+            "sha256": "7e2310523c64a275f58e4cda625c7c46c9cbcd2011bef932cdc64780bfea2b47",
+            "source": {
+                "title": "RFC 7638: JSON Web Key (JWK) Thumbprint",
+                "url": "https://www.rfc-editor.org/rfc/rfc7638",
+                "copyright": "Copyright (c) 2015 IETF Trust and the persons identified as the document authors. All rights reserved."
+            },
+            "license": {
+                "name": "IETF Trust Legal Provisions",
+                "url": "https://trustee.ietf.org/documents/trust-legal-provisions/"
+            },
+            "sections": [
+                "Section 3.1"
+            ]
+        },
+        {
+            "name": "rfc8037",
+            "url": "https://www.rfc-editor.org/rfc/rfc8037",
+            "retrieved": "2026-10-25",
+            "sha256": "9a1d196cd5491974bdb13c23ccde47f3bd62fc57a3314f181eb801a9e4689f18",
+            "source": {
+                "title": "RFC 8037: CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signatures in JSON Object Signing and Encryption (JOSE)",
+                "url": "https://www.rfc-editor.org/rfc/rfc8037",
+                "copyright": "Copyright (c) 2017 IETF Trust and the persons identified as the document authors. All rights reserved."
+            },
+            "license": {
+                "name": "IETF Trust Legal Provisions",
+                "url": "https://trustee.ietf.org/documents/trust-legal-provisions/"
+            },
+            "sections": [
+                "Appendix A.1",
+                "Appendix A.2",
+                "Appendix A.6",
+                "Appendix A.7"
+            ]
+        },
+        {
+            "name": "rfc8410",
+            "url": "https://www.rfc-editor.org/rfc/rfc8410",
+            "retrieved": "2026-10-25",
+            "sha256": "d63efaa67591f3e4ab8e369c4f66a0244e44ae99dd2849a3947642bc9a30382d",
+            "source": {
+                "title": "RFC 8410: Algorithm Identifiers for Ed25519, Ed448, X25519, and X448 for Use in the Internet X.509 Public Key Infrastructure",
+                "url": "https://www.rfc-editor.org/rfc/rfc8410",
+                "copyright": "Copyright (c) 2018 IETF Trust and the persons identified as the document authors. All rights reserved."
+            },
+            "license": {
+                "name": "IETF Trust Legal Provisions",
+                "url": "https://trustee.ietf.org/documents/trust-legal-provisions/"
+            },
+            "sections": [
+                "Section 10.1",
+                "Section 10.3"
+            ]
+        },
+        {
+            "name": "rfc9421",
+            "url": "https://www.rfc-editor.org/rfc/rfc9421",
+            "retrieved": "2026-10-25",
+            "sha256": "f6c12b3d4214839362b7550b83b006cc3c152a8a52b029621f0b9f97316db9bd",
+            "source": {
+                "title": "RFC 9421: HTTP Message Signatures",
+                "url": "https://www.rfc-editor.org/rfc/rfc9421",
+                "copyright": "Copyright (c) 2024 IETF Trust and the persons identified as the document authors. All rights reserved."
+            },
+            "license": {
+                "name": "IETF Trust Legal Provisions",
+                "url": "https://trustee.ietf.org/documents/trust-legal-provisions/"
+            },
+            "sections": [
+                "Appendix B.1.1",
+                "Appendix B.1.2",
+                "Appendix B.1.3",
+                "Appendix B.1.4"
+            ]
+        }
+    ]
+}

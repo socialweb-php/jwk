@@ -18,3 +18,8 @@
 /resources/                 export-ignore
 /SECURITY.md                export-ignore
 /tests/                     export-ignore
+
+# The RFC examples and the generated fixtures are kept byte for byte, so git
+# must not convert their line endings.
+/resources/**               -text
+/tests/fixtures/**          -text

@@ -1051,7 +1051,7 @@ class JwkTest extends TestCase
             false,
         ];
         yield 'B.1.2 private key re-exported as rsaEncryption' => [
-            'rfc9421/test-key-rsa-pss.private.rsa.pem',
+            'generated/test-key-rsa-pss.private.rsa.pem',
             'rfc9421/test-key-rsa-pss.json',
             RsaKey::class,
             true,
@@ -1117,18 +1117,18 @@ class JwkTest extends TestCase
     {
         yield 'B.1.1' => [
             'rfc9421/test-key-rsa.json',
-            'rfc9421/test-key-rsa.public.spki.pem',
-            'rfc9421/test-key-rsa.private.pkcs8.pem',
+            'generated/test-key-rsa.public.spki.pem',
+            'generated/test-key-rsa.private.pkcs8.pem',
         ];
         yield 'B.1.2' => [
             'rfc9421/test-key-rsa-pss.json',
             'rfc9421/test-key-rsa-pss.public.pem',
-            'rfc9421/test-key-rsa-pss.private.rsa.pem',
+            'generated/test-key-rsa-pss.private.rsa.pem',
         ];
         yield 'B.1.3' => [
             'rfc9421/test-key-ecc-p256.json',
             'rfc9421/test-key-ecc-p256.public.pem',
-            'rfc9421/test-key-ecc-p256.private.pkcs8.pem',
+            'generated/test-key-ecc-p256.private.pkcs8.pem',
         ];
         yield 'B.1.4' => [
             'rfc9421/test-key-ed25519.json',

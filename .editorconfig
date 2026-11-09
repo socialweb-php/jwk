@@ -14,3 +14,8 @@ indent_size = 4
 
 [*.{yml,yaml}]
 indent_size = 2
+
+# The RFC examples and the generated fixtures are kept byte for byte.
+[{resources,tests/fixtures}/**]
+insert_final_newline = false
+trim_trailing_whitespace = false

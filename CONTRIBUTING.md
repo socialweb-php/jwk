@@ -130,6 +130,14 @@ You may run mutation tests manually with the following command:
 composer mutation
 ```
 
+### Checking the copied RFC examples
+
+The keys and PEM files the tests compare the package against are the examples the RFCs print, transcribed under `resources/`, and `resources/manifest.json` records a checksum for each set. `composer check-fixtures` computes the checksums again and compares them with the manifest, so an example that has changed since it was transcribed is found before the tests run. GitHub Actions runs the same check for pull requests.
+
+```bash
+composer check-fixtures
+```
+
 [captainhook]: https://github.com/CaptainHookPhp/captainhook
 [code of conduct]: CODE_OF_CONDUCT.md
 [composer]: https://getcomposer.org

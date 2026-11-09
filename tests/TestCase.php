@@ -8,6 +8,7 @@ use OpenSSLAsymmetricKey;
 use PHPUnit\Framework\TestCase as BaseTestCase;
 use RuntimeException;
 
+use function dirname;
 use function file_get_contents;
 use function hex2bin;
 use function is_array;
@@ -17,6 +18,7 @@ use function openssl_pkey_export;
 use function openssl_pkey_get_details;
 use function openssl_sign;
 use function preg_replace;
+use function str_starts_with;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -26,12 +28,13 @@ use const JSON_THROW_ON_ERROR;
 class TestCase extends BaseTestCase
 {
     /**
-     * Returns the JSON text of a fixture under `tests/fixtures/`, such as
-     * `rfc7517/appendix-a1.json`
+     * Returns the JSON text of an RFC example under `resources/`, such as
+     * `rfc7517/appendix-a1.json`, or of a generated fixture under
+     * `tests/fixtures/`, such as `generated/rsa-three-primes.json`
      */
     protected static function fixtureJson(string $file): string
     {
-        $contents = file_get_contents(__DIR__ . '/fixtures/' . $file);
+        $contents = file_get_contents(self::fixturePath($file));
 
         if ($contents === false) {
             throw new RuntimeException('Cannot read the fixture ' . $file);
@@ -41,8 +44,8 @@ class TestCase extends BaseTestCase
     }
 
     /**
-     * Returns the text of a PEM fixture under `tests/fixtures/`, such as
-     * `rfc8410/section-10.1-public.pem`
+     * Returns the text of a PEM fixture, such as
+     * `rfc8410/section-10.1-public.pem` or `generated/dsa-public.pem`
      */
     protected static function fixturePem(string $file): string
     {
@@ -156,6 +159,17 @@ class TestCase extends BaseTestCase
         }
 
         return $pem;
+    }
+
+    /**
+     * Returns where a fixture is: a generated fixture is under
+     * `tests/fixtures/`, and an RFC example is under `resources/`
+     */
+    private static function fixturePath(string $file): string
+    {
+        return str_starts_with($file, 'generated/')
+            ? __DIR__ . '/fixtures/' . $file
+            : dirname(__DIR__) . '/resources/' . $file;
     }
 
     /**

@@ -381,10 +381,10 @@ class OpenSslTest extends TestCase
     {
         yield 'PKCS #1 RSA PRIVATE KEY' => ['rfc9421/test-key-rsa.private.pem', OPENSSL_KEYTYPE_RSA];
         yield 'PKCS #1 RSA PUBLIC KEY' => ['rfc9421/test-key-rsa.public.pem', OPENSSL_KEYTYPE_RSA];
-        yield 'PKCS #8 RSA PRIVATE KEY' => ['rfc9421/test-key-rsa.private.pkcs8.pem', OPENSSL_KEYTYPE_RSA];
-        yield 'RSA SubjectPublicKeyInfo' => ['rfc9421/test-key-rsa.public.spki.pem', OPENSSL_KEYTYPE_RSA];
+        yield 'PKCS #8 RSA PRIVATE KEY' => ['generated/test-key-rsa.private.pkcs8.pem', OPENSSL_KEYTYPE_RSA];
+        yield 'RSA SubjectPublicKeyInfo' => ['generated/test-key-rsa.public.spki.pem', OPENSSL_KEYTYPE_RSA];
         yield 'SEC 1 EC PRIVATE KEY' => ['rfc9421/test-key-ecc-p256.private.pem', OPENSSL_KEYTYPE_EC];
-        yield 'PKCS #8 EC PRIVATE KEY' => ['rfc9421/test-key-ecc-p256.private.pkcs8.pem', OPENSSL_KEYTYPE_EC];
+        yield 'PKCS #8 EC PRIVATE KEY' => ['generated/test-key-ecc-p256.private.pkcs8.pem', OPENSSL_KEYTYPE_EC];
         yield 'EC SubjectPublicKeyInfo' => ['rfc9421/test-key-ecc-p256.public.pem', OPENSSL_KEYTYPE_EC];
         yield 'PKCS #8 Ed25519 PRIVATE KEY' => ['rfc9421/test-key-ed25519.private.pem', OPENSSL_KEYTYPE_ED25519];
         yield 'Ed25519 SubjectPublicKeyInfo' => ['rfc9421/test-key-ed25519.public.pem', OPENSSL_KEYTYPE_ED25519];
@@ -581,7 +581,7 @@ class OpenSslTest extends TestCase
         $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-rsa.private.pem'), null);
         $pem = OpenSsl::publicPem($key);
 
-        $this->assertSame(self::fixturePem('rfc9421/test-key-rsa.public.spki.pem'), $pem);
+        $this->assertSame(self::fixturePem('generated/test-key-rsa.public.spki.pem'), $pem);
         $this->assertTrue(str_ends_with($pem, "-----END PUBLIC KEY-----\n"));
         $this->assertFalse(str_contains($pem, "\r"));
 
@@ -597,7 +597,7 @@ class OpenSslTest extends TestCase
         $key = OpenSsl::readPem(self::fixturePem('rfc9421/test-key-ecc-p256.private.pem'), null);
 
         $this->assertSame(
-            self::fixturePem('rfc9421/test-key-ecc-p256.private.pkcs8.pem'),
+            self::fixturePem('generated/test-key-ecc-p256.private.pkcs8.pem'),
             OpenSsl::privatePem($key, null),
         );
         $this->assertFalse(openssl_error_string());
