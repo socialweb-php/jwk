@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- A value of a PHP type JSON cannot hold, such as an object of a class other than `stdClass`, a closure, or a resource, given anywhere in the input of `fromJson()`, a constructor, or `withAdditionalMember()`, raises `InvalidArgument` before any member is read. It was `InvalidJwk` with `WrongType`, and in a set a skipped key.
-- A `keyOperations`, `certificateChain`, or `otherPrimesInfo` constructor argument that is not a list of the right type, and a `keys` argument of `new JwkSet()` that is not a list of `Jwk` objects, raise `InvalidArgument`. They were `InvalidJwk` with `WrongType` and `InvalidJwkSet`.
+- A value of a PHP type JSON cannot hold, such as an object of a class other than `stdClass`, a closure, or a resource, given anywhere in the input of `fromJson()`, a constructor, or `withAdditionalMember()`, raises `InvalidArgument` before any member is read. It was `InvalidJwk` with `WrongType`, in a set a skipped key, and at the top level of a set `InvalidJwkSet`.
+- A `keyOperations`, `certificateChain`, or `otherPrimesInfo` constructor argument that is not a list of the right type, the same arguments of `Jwk::withKeyOperations()` and `Jwk::withCertificateChain()`, and a `keys` argument of `new JwkSet()` that is not a list of `Jwk` objects, raise `InvalidArgument`. They were `InvalidJwk` with `WrongType` and `InvalidJwkSet`.
+- The `InvalidJwkSet` constructor takes an `InvalidJwkSetReason` first, then the message, then an optional previous throwable. It took a message, a code, and an optional previous throwable, so code that constructs the exception itself must pass a reason.
 - A string that is not valid UTF-8 or a number that is not finite is refused as `InvalidJwk` with `MalformedJson`, where it was `InvalidValue`; in a member of a set other than `keys`, as `InvalidJwkSet` with `MalformedJson`.
 - `toJson()` on a key, a set, and an `oth` entry writes a character outside ASCII as itself rather than as a `\u` escape.
 - `Curve::fromOpensslCurveName()` is `tryFromOpenSslCurveName()`, `fromOpensslKeyType()` is `tryFromOpenSslKeyType()`, `opensslCurveName()` is `openSslCurveName()`, `opensslKeyType()` is `openSslKeyType()`, and `opensslDetailsKey()` is `openSslDetailsKey()`.
