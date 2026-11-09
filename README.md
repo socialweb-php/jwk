@@ -287,7 +287,37 @@ RFC 7517 and RFC 7518 say a few things a producer SHOULD or SHOULD NOT do that a
 
 ### Storing a private key as a PEM file
 
-`toPem()` writes the public key as a SubjectPublicKeyInfo PEM. `toPrivatePem()` writes the private key as PKCS #8, unencrypted, or encrypted with AES-256-CBC when a passphrase is given: `$jwk->toPrivatePem($passphrase)`. An RSA private key whose private members are `d` alone cannot be written as PKCS #8, which holds the primes, and is refused as `ConversionFailed` with the reason `MissingCrtMembers`; `toOpenSslKey()` still returns such a key, and it signs. An `oct` key has no PEM form.
+Some keys reach your application as a JWK: a key service hands one out, or another application stored its key that way. OpenSSL and the tools built on it read keys from PEM files. `toPrivatePem()` writes a private key as PKCS #8, the form `openssl genpkey` writes, encrypted with AES-256-CBC when you give it a passphrase, and `Jwk::fromPem()` reads the file back with the same passphrase. The key below is the Ed25519 private key of RFC 8037 appendix A.1, and `$passphrase` is the passphrase your application gets from an environment variable.
+
+```php
+use SocialWeb\Jwk\Jwk;
+
+$privateKey = Jwk::fromJson(<<<'JSON'
+    {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "d": "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    }
+    JSON);
+
+file_put_contents('/etc/example/keys/ed25519.pem', $privateKey->toPrivatePem($passphrase));
+
+$storedKey = Jwk::fromPem(file_get_contents('/etc/example/keys/ed25519.pem'), $passphrase);
+
+echo $storedKey->thumbprint(), "\n";
+```
+
+This prints the thumbprint of the key read from the file, the one RFC 8037 appendix A.3 computes for this key:
+
+```text
+kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+```
+
+- Without a passphrase, `toPrivatePem()` writes the key unencrypted. An empty string is refused as `InvalidArgument`; pass `null` for no encryption. Keep the file readable only by the user your application runs as.
+- `toPem()` writes the public key as a SubjectPublicKeyInfo PEM.
+- An RSA private key whose private members are `d` alone cannot be written as PKCS #8, which holds the primes, and is refused as `ConversionFailed` with the reason `MissingCrtMembers`; `toOpenSslKey()` still returns such a key, and it signs.
+- An `oct` key has no PEM form.
 
 ### Generating keys
 
