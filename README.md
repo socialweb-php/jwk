@@ -176,7 +176,7 @@ $set = new JwkSet([
         ->withUse(KeyUse::Signature),
 ]);
 
-echo $set->toJson(), "\n";
+echo $set->toJson() . "\n";
 ```
 
 This prints the set on one line. With whitespace added and the RSA modulus shortened, it looks like this:
@@ -252,8 +252,8 @@ $jwk = Jwk::fromJson(<<<'JSON'
     }
     JSON);
 
-echo $jwk->thumbprint(), "\n";
-echo $jwk->thumbprintUri(), "\n";
+echo $jwk->thumbprint() . "\n";
+echo $jwk->thumbprintUri() . "\n";
 ```
 
 This prints:
@@ -305,7 +305,7 @@ file_put_contents('/etc/example/keys/ed25519.pem', $privateKey->toPrivatePem($pa
 
 $storedKey = Jwk::fromPem(file_get_contents('/etc/example/keys/ed25519.pem'), $passphrase);
 
-echo $storedKey->thumbprint(), "\n";
+echo $storedKey->thumbprint() . "\n";
 ```
 
 This prints the thumbprint of the key read from the file, the one RFC 8037 appendix A.3 computes for this key:
@@ -336,7 +336,7 @@ use SocialWeb\Jwk\Jwk;
 
 $privateKey = Jwk::fromPem(file_get_contents('/etc/example/keys/ed25519.pem'));
 
-echo $privateKey->toPublic()->toJson(), "\n";
+echo $privateKey->toPublic()->toJson() . "\n";
 ```
 
 This prints a key like this:
