@@ -58,8 +58,7 @@ final readonly class OctKey extends Jwk
      *     say
      */
     public function __construct(
-        #[SensitiveParameter]
-        public string $keyValue,
+        #[SensitiveParameter] public string $keyValue,
         ?string $keyId = null,
         ?string $algorithm = null,
         KeyUse | string | null $use = null,

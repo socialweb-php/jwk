@@ -106,20 +106,13 @@ final readonly class RsaKey extends Jwk
     public function __construct(
         public string $modulus,
         public string $publicExponent,
-        #[SensitiveParameter]
-        public ?string $privateExponent = null,
-        #[SensitiveParameter]
-        public ?string $firstPrimeFactor = null,
-        #[SensitiveParameter]
-        public ?string $secondPrimeFactor = null,
-        #[SensitiveParameter]
-        public ?string $firstFactorCrtExponent = null,
-        #[SensitiveParameter]
-        public ?string $secondFactorCrtExponent = null,
-        #[SensitiveParameter]
-        public ?string $firstCrtCoefficient = null,
-        #[SensitiveParameter]
-        public array $otherPrimesInfo = [],
+        #[SensitiveParameter] public ?string $privateExponent = null,
+        #[SensitiveParameter] public ?string $firstPrimeFactor = null,
+        #[SensitiveParameter] public ?string $secondPrimeFactor = null,
+        #[SensitiveParameter] public ?string $firstFactorCrtExponent = null,
+        #[SensitiveParameter] public ?string $secondFactorCrtExponent = null,
+        #[SensitiveParameter] public ?string $firstCrtCoefficient = null,
+        #[SensitiveParameter] public array $otherPrimesInfo = [],
         ?string $keyId = null,
         ?string $algorithm = null,
         KeyUse | string | null $use = null,

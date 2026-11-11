@@ -58,12 +58,9 @@ final readonly class OtherPrimeInfo implements JsonSerializable
      *     names the member of the entry
      */
     public function __construct(
-        #[SensitiveParameter]
-        public string $primeFactor,
-        #[SensitiveParameter]
-        public string $factorCrtExponent,
-        #[SensitiveParameter]
-        public string $factorCrtCoefficient,
+        #[SensitiveParameter] public string $primeFactor,
+        #[SensitiveParameter] public string $factorCrtExponent,
+        #[SensitiveParameter] public string $factorCrtCoefficient,
     ) {
         self::checkMembers($primeFactor, $factorCrtExponent, $factorCrtCoefficient, 'an "oth" entry');
     }

@@ -72,8 +72,7 @@ final readonly class OkpKey extends Jwk
     public function __construct(
         public Curve $curve,
         public string $publicKey,
-        #[SensitiveParameter]
-        public ?string $privateKey = null,
+        #[SensitiveParameter] public ?string $privateKey = null,
         ?string $keyId = null,
         ?string $algorithm = null,
         KeyUse | string | null $use = null,

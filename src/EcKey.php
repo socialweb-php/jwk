@@ -78,8 +78,7 @@ final readonly class EcKey extends Jwk
         public Curve $curve,
         public string $x,
         public string $y,
-        #[SensitiveParameter]
-        public ?string $privateKey = null,
+        #[SensitiveParameter] public ?string $privateKey = null,
         ?string $keyId = null,
         ?string $algorithm = null,
         KeyUse | string | null $use = null,
